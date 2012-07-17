@@ -92,12 +92,12 @@ scope_ (Log ch) s act = do
 
 -- | New log-scope with lifting exceptions as errors
 scope :: Log -> Text -> IO a -> IO a
-scope l@(Log ch) s act = writeChan ch (EnterScope s) >> E.catch act onError where
+scope l@(Log ch) s act = writeChan ch (EnterScope s) >> E.finally (E.catch act onError) leave where
 	onError :: E.SomeException -> IO a
 	onError e = do
 		log l Error $ T.pack $ "Scope leaves with exception: " ++ show e
-		writeChan ch LeaveScope
 		E.throwIO e
+	leave = writeChan ch LeaveScope
 
 -- | Log entry, scope or message
 data Entry =
