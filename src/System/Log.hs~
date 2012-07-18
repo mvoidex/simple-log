@@ -1,6 +1,13 @@
 module System.Log (
-    ) where
+	module System.Log.Base,
+	module System.Log.Text,
+	module System.Log.HTML,
+	module System.Log.Console,
+	module System.Log.File
+	) where
 
-data Level = Trace | Debug | Info | Warning | Error | Fatal
-	deriving (Eq, Ord, Read, Show, Bounded, Enum)
-
+import System.Log.Base
+import System.Log.Text
+import System.Log.HTML
+import System.Log.Console
+import System.Log.File

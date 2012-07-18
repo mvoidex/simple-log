@@ -14,8 +14,7 @@ import System.Log.Text
 htmlFmt :: String -> String -> Converter Text
 htmlFmt fmt title = Converter header c where
 	c (Message tm l msg) = T.unlines [
-		T.pack "<div class=\"div0\">",
-		T.pack $ "<div class=\"common\"" ++ typeClass l ++ "\">",
+		T.pack $ "<div class=\"common " ++ typeClass l ++ "\">",
 		T.pack $ "<span class=\"date\">" ++ formatTm tm ++ "</span>",
 		T.pack $ "<b>" ++ classMsg l ++ "</b>.",
 		msg,
@@ -23,10 +22,10 @@ htmlFmt fmt title = Converter header c where
 
 	typeClass Trace = "trace"
 	typeClass Debug = "except debug"
-	typeClass Info = "except info"
-	typeClass Warning = "except warning"
-	typeClass Error = "except error"
-	typeClass Fatal = "critical"
+	typeClass Info = "div1 except info"
+	typeClass Warning = "div0 except warning"
+	typeClass Error = "div0 except error"
+	typeClass Fatal = "div0 critical"
 
 	classMsg Trace = "Trace info"
 	classMsg Debug = "Debug info"

@@ -2,12 +2,15 @@ module System.Log.Base (
 	Level(..),
 	Message(..),
 	Converter(..), Consumer(..),
+	Entry(..), Command(..),
+	entries, flatten, untrace,
 	Logger(..), logger,
 	Log(..),
 	newLog,
-	log,
-	scope_,
-	scope
+	writeLog,
+	scopeLog_,
+	scopeLog,
+	scoperLog
 	) where
 
 import Prelude hiding (log)
@@ -49,14 +52,12 @@ data Logger = Logger {
 	loggerLog :: Message -> IO (),
 	loggerClose :: IO () }
 
--- | Convert consumer to logger
-toLogger :: Converter a -> Consumer a -> Logger
-toLogger converter consumer = Logger write (consumerClose consumer) where
-	write msg = consume consumer (convert converter msg)
-
 -- | Convert consumer creater to logger creater
 logger :: Converter a -> IO (Consumer a) -> IO Logger
-logger converter = liftM (toLogger converter)
+logger converter consumer = do
+	c <- consumer
+	when (consumerNew c) $ consume c (initial converter)
+	return $ Logger (consume c . convert converter) (consumerClose c)
 
 -- | Log
 data Log = Log {
@@ -79,25 +80,29 @@ newLog ls = do
 	return $ Log ch
 
 -- | Write message to log
-log :: Log -> Level -> Text -> IO ()
-log (Log ch) l msg = do
+writeLog :: Log -> Level -> Text -> IO ()
+writeLog (Log ch) l msg = do
 	tm <- getCurrentTime
 	writeChan ch $ PostMessage (Message tm l msg)
 
 -- | New log-scope
-scope_ :: Log -> Text -> IO a -> IO a
-scope_ (Log ch) s act = do
-	writeChan ch $ EnterScope s
-	E.finally act (writeChan ch LeaveScope)
+scopeLog_ :: Log -> Text -> IO a -> IO a
+scopeLog_ (Log ch) s act = E.bracket_ (writeChan ch $ EnterScope s) (writeChan ch LeaveScope) act
 
 -- | New log-scope with lifting exceptions as errors
-scope :: Log -> Text -> IO a -> IO a
-scope l@(Log ch) s act = writeChan ch (EnterScope s) >> E.finally (E.catch act onError) leave where
+scopeLog :: Log -> Text -> IO a -> IO a
+scopeLog l s act = scopeLog_ l s (E.catch act onError) where
 	onError :: E.SomeException -> IO a
 	onError e = do
-		log l Error $ T.pack $ "Scope leaves with exception: " ++ show e
+		writeLog l Error $ T.pack $ "Scope leaves with exception: " ++ show e
 		E.throwIO e
-	leave = writeChan ch LeaveScope
+
+-- | New log-scope with tracing scope result
+scoperLog :: Show a => Log -> Text -> IO a -> IO a
+scoperLog l s act = do
+	r <- scopeLog l s act
+	writeLog l Trace $ T.concat [T.pack "Scope ", s, T.pack " leaves with result: ", T.pack $ show r]
+	return r
 
 -- | Log entry, scope or message
 data Entry =
