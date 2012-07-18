@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances, UndecidableInstances #-}
 
 module System.Log.Monad (
-	withLog, log, scope_, scope, scoper
+	withLog, log, scope_, scope, scoper, MonadLog(..)
 	) where
 
 import Prelude hiding (log, catch)

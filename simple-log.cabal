@@ -1,12 +1,12 @@
-Name:                      simple-log
-Version:                   0.1
-Synopsis:                 Simple log for Haskell
-License:                   BSD3
-Author:                    Alexandr `Voidex` Ruchkin
-Homepage:              http://github.com/mvoidex/simple-log
-Maintainer:              voidex@live.com
-Category:                 Logging
-Build-type:              Simple
+Name:                 simple-log
+Version:              0.1
+Synopsis:             Simple log for Haskell
+License:              BSD3
+Author:               Alexandr `Voidex` Ruchkin
+Homepage:             http://github.com/mvoidex/simple-log
+Maintainer:           voidex@live.com
+Category:             Logging
+Build-type:           Simple
 Cabal-version:        >= 1.6
 
 Library
