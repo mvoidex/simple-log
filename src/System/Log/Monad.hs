@@ -19,7 +19,7 @@ import System.Log.Base
 class (MonadCatchIO m) => MonadLog m where
 	askLog :: m Log
 
-instance (MonadCatchIO m, MonadReader Log m) => MonadLog m where
+instance (MonadCatchIO m) => MonadLog (ReaderT Log m) where
 	askLog = ask
 
 withLog :: Log -> ReaderT Log m a -> m a
