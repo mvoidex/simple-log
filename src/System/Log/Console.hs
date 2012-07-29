@@ -1,6 +1,6 @@
 module System.Log.Console (
-	console
-	) where
+    console
+    ) where
 
 import Data.Text (Text)
 import qualified Data.Text as T

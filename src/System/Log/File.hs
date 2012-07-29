@@ -1,6 +1,6 @@
 module System.Log.File (
-	file
-	) where
+    file
+    ) where
 
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -11,6 +11,6 @@ import System.IO
 
 file :: FilePath -> IO (Consumer Text)
 file f = do
-	ex <- doesFileExist f
-	h <- openFile f AppendMode
-	return $ Consumer (not ex) (T.hPutStrLn h) (hClose h)
+    ex <- doesFileExist f
+    h <- openFile f AppendMode
+    return $ Consumer (not ex) (T.hPutStrLn h) (hFlush h >> hClose h)
