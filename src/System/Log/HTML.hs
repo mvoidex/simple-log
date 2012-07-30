@@ -17,7 +17,7 @@ htmlFmt fmt title = Converter header c where
         T.pack $ "<div class=\"common " ++ typeClass l ++ "\">",
         T.pack $ "<span class=\"date\">" ++ formatTm tm ++ "</span>",
         T.pack $ "<b>" ++ classMsg l ++ "</b>.",
-        T.concat [T.pack "<i>", T.intercalate (T.pack "/") p, T.pack "&gt;</i>"],
+        T.concat [T.pack "<i>", T.intercalate (T.pack "/") (reverse p), T.pack "&gt;</i>"],
         msg,
         T.pack "</div>"]
 

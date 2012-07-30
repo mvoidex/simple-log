@@ -1,9 +1,12 @@
 module System.Log.Base (
     Level(..),
+    Politics(..), Rule(..), Rules,
+    absolute, relative,
+    politics, low, high,
     Message(..),
     Converter(..), Consumer(..),
     Entry(..), Command(..),
-    entries, flatten, untrace,
+    entries, flatten, rules,
     Logger(..), logger,
     Log(..),
     newLog,
@@ -21,6 +24,7 @@ import Control.Concurrent
 import Control.Concurrent.Chan
 import Control.Monad
 import Data.List
+import qualified Data.Map as M
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
@@ -28,6 +32,39 @@ import Data.Time
 -- | Level of message
 data Level = Trace | Debug | Info | Warning | Error | Fatal
     deriving (Eq, Ord, Read, Show, Enum, Bounded)
+
+-- | Scope politics
+data Politics = Politics {
+    politicsLow :: Level,
+    politicsHigh :: Level }
+        deriving (Eq, Ord, Read, Show)
+
+-- | Rule for politics
+data Rule = Rule {
+    rulePath :: [Text] -> Bool,
+    rulePolitics :: Politics -> Politics }
+
+type Rules = [Rule]
+
+-- | Absolute scope-path rule
+absolute :: [Text] -> [Text] -> Bool
+absolute path = (== reverse path)
+
+-- | Relative scope-path rule
+relative :: [Text] -> [Text] -> Bool
+relative path = ((reverse path) `isInfixOf`)
+
+-- | Just set new politics
+politics :: Level -> Level -> Politics -> Politics
+politics l h _ = Politics l h
+
+-- | Set new low level
+low :: Level -> Politics -> Politics
+low l (Politics _ h) = Politics l h
+
+-- | Set new high level
+high :: Level -> Politics -> Politics
+high h (Politics l _) = Politics l h
 
 -- | Log message
 data Message = Message {
@@ -65,13 +102,13 @@ data Log = Log {
     logChan :: Chan Command }
 
 -- | Create log
-newLog :: [IO Logger] -> IO Log
-newLog [] = error "Specify at least one log consumer"
-newLog ls = do
+newLog :: Politics -> Rules -> [IO Logger] -> IO Log
+newLog _ _ [] = error "Specify at least one log consumer"
+newLog ps rs ls = do
     ch <- newChan
     cts <- getChanContents ch
     let
-        msgs = flatten . untrace . entries $ cts
+        msgs = flatten . rules rs ps [] . entries $ cts
         startLog l = do
             l' <- l
             forkIO $ E.finally
@@ -113,7 +150,7 @@ data Entry =
 
 foldEntry :: (Message -> a) -> (Text -> [a] -> a) -> Entry -> a
 foldEntry r s (Entry m) = r m
-foldEntry r s (Scope t rs) = s t (map (foldEntry r s) rs)
+foldEntry r s (Scope t es) = s t (map (foldEntry r s) es)
 
 -- | Command to logger
 data Command =
@@ -133,21 +170,25 @@ entries = fst . entries' where
 -- | Flattern entries to raw list of messages
 flatten :: [Entry] -> [Message]
 flatten = concatMap $ foldEntry return (\s ms -> map (addScope s) (concat ms)) where
-    addScope s (Message tm l p str) = Message tm l (p ++ [s]) str
+    addScope s (Message tm l p str) = Message tm l (s : p) str
 
--- | Remove unnecessary traces
-untrace :: [Entry] -> [Entry]
-untrace = map untraceScope . concatEntries . first (partition isNotTrace) . break isError where
+-- | Apply rules
+rules :: Rules -> Politics -> [Text] -> [Entry] -> [Entry]
+rules rs ps path = map untraceScope . concatEntries . first (partition isNotTrace) . break isError where
     -- untrace inner scopes
-    untraceScope = foldEntry Entry (\t rs -> Scope t (untrace rs))
-
+    untraceScope = foldEntry Entry (\ t es -> Scope t (rules rs (apply ps) (t : path) es))
+    
     -- If there is no errors, use only infos and scopes and drop all traces
     -- otherwise concat all messages
     concatEntries ((x, y), z) = x ++ if null z then [] else y ++ z
 
-    isError = onLevel False (> Info)
-    isNotTrace = onLevel True (== Info)
-
+    isError = onLevel False (> politicsHigh ps)
+    isNotTrace = onLevel True (>= politicsLow ps)
+    
     onLevel :: a -> (Level -> a) -> Entry -> a
     onLevel v f (Scope _ _) = v
     onLevel v f (Entry (Message _ l _ _)) = f l
+    
+    -- apply rules
+    apply :: Politics -> Politics
+    apply = foldr (.) id $ map rulePolitics $ filter (`rulePath` path) rs

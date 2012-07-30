@@ -17,7 +17,7 @@ textFmt :: String -> Converter Text
 textFmt fmt = Converter T.empty c where
     c (Message tm l p msg) = T.intercalate (T.pack "\t") [T.pack s, T.pack (toStr l), msg'] where
         s = formatTime defaultTimeLocale fmt tm
-        msg' = T.concat [T.intercalate (T.pack "/") p, T.pack "> ", msg]
+        msg' = T.concat [T.intercalate (T.pack "/") (reverse p), T.pack "> ", msg]
     toStr Trace = "TRACE"
     toStr Debug = "DEBUG"
     toStr Info = "INFO"
