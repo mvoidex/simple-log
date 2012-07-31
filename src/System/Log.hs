@@ -7,14 +7,9 @@ module System.Log (
     module System.Log.File
     ) where
 
-import System.Log.Base (Level(..), Politics(..), Rule(..), Rules, absolute, relative, politics, low, high, Message(..), Logger, logger, Log, newLog)
+import System.Log.Base hiding (entries, flatten, rules, writeLog, scopeLog_, scopeLog, scoperLog)
 import System.Log.Monad
 import System.Log.Text
 import System.Log.HTML
 import System.Log.Console
 import System.Log.File
-
-
-
-
-
