@@ -1,7 +1,7 @@
 module System.Log.Base (
     Level(..),
     Politics(..), Rule(..), Rules,
-    absolute, relative,
+    rule, absolute, relative,
     politics, low, high,
     Message(..),
     Converter(..), Consumer(..),
@@ -46,13 +46,17 @@ data Rule = Rule {
 
 type Rules = [Rule]
 
+-- | Make rule
+rule :: ([Text] -> Bool) -> (Politics -> Politics) -> Rule
+rule = Rule
+
 -- | Absolute scope-path rule
-absolute :: [Text] -> [Text] -> Bool
-absolute path = (== reverse path)
+absolute :: [Text] -> (Politics -> Politics) -> Rule
+absolute path = rule (== reverse path)
 
 -- | Relative scope-path rule
-relative :: [Text] -> [Text] -> Bool
-relative path = ((reverse path) `isInfixOf`)
+relative :: [Text] -> (Politics -> Politics) -> Rule
+relative path = rule (reverse path `isPrefixOf`)
 
 -- | Just set new politics
 politics :: Level -> Level -> Politics -> Politics
@@ -176,7 +180,8 @@ flatten = concatMap $ foldEntry return (\s ms -> map (addScope s) (concat ms)) w
 rules :: Rules -> Politics -> [Text] -> [Entry] -> [Entry]
 rules rs ps path = map untraceScope . concatEntries . first (partition isNotTrace) . break isError where
     -- untrace inner scopes
-    untraceScope = foldEntry Entry (\ t es -> Scope t (rules rs (apply ps) (t : path) es))
+    untraceScope (Entry msg) = Entry msg
+    untraceScope (Scope t es) = Scope t $ rules rs (apply t ps) (t : path) es
     
     -- If there is no errors, use only infos and scopes and drop all traces
     -- otherwise concat all messages
@@ -190,5 +195,5 @@ rules rs ps path = map untraceScope . concatEntries . first (partition isNotTrac
     onLevel v f (Entry (Message _ l _ _)) = f l
     
     -- apply rules
-    apply :: Politics -> Politics
-    apply = foldr (.) id $ map rulePolitics $ filter (`rulePath` path) rs
+    apply :: Text -> Politics -> Politics
+    apply sub = foldr (.) id $ map rulePolitics $ filter (`rulePath` (sub : path)) rs
