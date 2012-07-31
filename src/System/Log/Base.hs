@@ -1,6 +1,7 @@
 module System.Log.Base (
     Level(..),
     Politics(..), Rule(..), Rules,
+    defaultPolitics,
     rule, absolute, relative,
     politics, low, high,
     Message(..),
@@ -38,6 +39,10 @@ data Politics = Politics {
     politicsLow :: Level,
     politicsHigh :: Level }
         deriving (Eq, Ord, Read, Show)
+
+-- | Default politics
+defaultPolitics :: Politics
+defaultPolitics = Politics Info Info
 
 -- | Rule for politics
 data Rule = Rule {
