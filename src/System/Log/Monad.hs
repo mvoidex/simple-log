@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances, UndecidableInstances #-}
 
 module System.Log.Monad (
-    withLog, log, scope_, scope, scoper, MonadLog(..)
+    withNoLog, withLog, log, scope_, scope, scoper, MonadLog(..)
     ) where
 
 import Prelude hiding (log, catch)
@@ -22,19 +22,22 @@ class (MonadCatchIO m) => MonadLog m where
 instance (MonadCatchIO m) => MonadLog (ReaderT Log m) where
     askLog = ask
 
+withNoLog :: ReaderT Log m a -> m a
+withNoLog act = runReaderT act noLog
+
 withLog :: Log -> ReaderT Log m a -> m a
 withLog l act = runReaderT act l
 
 log :: (MonadLog m) => Level -> Text -> m ()
 log l msg = do
-    (Log ch) <- askLog
+    (Log post) <- askLog
     tm <- liftIO getCurrentTime
-    liftIO $ writeChan ch $ PostMessage (Message tm l [] msg)
+    liftIO $ post $ PostMessage (Message tm l [] msg)
 
 scope_ :: (MonadLog m) => Text -> m a -> m a
 scope_ s act = do
-    (Log ch) <- askLog
-    bracket_ (liftIO $ writeChan ch $ EnterScope s) (liftIO $ writeChan ch LeaveScope) act
+    (Log post) <- askLog
+    bracket_ (liftIO $ post $ EnterScope s) (liftIO $ post LeaveScope) act
 
 -- | Scope with log all exceptions
 scope :: (MonadLog m) => Text -> m a -> m a

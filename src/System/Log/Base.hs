@@ -9,7 +9,7 @@ module System.Log.Base (
     Entry(..), Command(..),
     entries, flatten, rules,
     Logger(..), logger,
-    Log(..),
+    Log(..), noLog,
     newLog,
     writeLog,
     scopeLog_,
@@ -108,11 +108,15 @@ logger converter consumer = do
 
 -- | Log
 data Log = Log {
-    logChan :: Chan Command }
+    logPost :: Command -> IO () }
+
+-- | Empty log
+noLog :: Log
+noLog = Log $ const (return ())
 
 -- | Create log
 newLog :: Politics -> Rules -> [IO Logger] -> IO Log
-newLog _ _ [] = error "Specify at least one log consumer"
+newLog _ _ [] = return noLog
 newLog ps rs ls = do
     ch <- newChan
     cts <- getChanContents ch
@@ -124,17 +128,17 @@ newLog ps rs ls = do
                 (mapM_ (loggerLog l') msgs)
                 (loggerClose l')
     mapM_ startLog ls
-    return $ Log ch
+    return $ Log $ writeChan ch
 
 -- | Write message to log
 writeLog :: Log -> Level -> Text -> IO ()
-writeLog (Log ch) l msg = do
+writeLog (Log post) l msg = do
     tm <- getCurrentTime
-    writeChan ch $ PostMessage (Message tm l [] msg)
+    post $ PostMessage (Message tm l [] msg)
 
 -- | New log-scope
 scopeLog_ :: Log -> Text -> IO a -> IO a
-scopeLog_ (Log ch) s act = E.bracket_ (writeChan ch $ EnterScope s) (writeChan ch LeaveScope) act
+scopeLog_ (Log post) s act = E.bracket_ (post $ EnterScope s) (post LeaveScope) act
 
 -- | New log-scope with lifting exceptions as errors
 scopeLog :: Log -> Text -> IO a -> IO a
