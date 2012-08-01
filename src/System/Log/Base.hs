@@ -23,6 +23,7 @@ import Control.Arrow
 import qualified Control.Exception as E
 import Control.Concurrent
 import Control.Concurrent.Chan
+import Control.DeepSeq
 import Control.Monad
 import Data.List
 import qualified Data.Map as M
@@ -132,7 +133,7 @@ newLog ps rs ls = do
 
 -- | Write message to log
 writeLog :: Log -> Level -> Text -> IO ()
-writeLog (Log post) l msg = do
+writeLog (Log post) l msg = msg `deepseq` do
     tm <- getCurrentTime
     post $ PostMessage (Message tm l [] msg)
 
