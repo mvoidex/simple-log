@@ -13,4 +13,8 @@ file :: FilePath -> IO (Consumer Text)
 file f = do
     ex <- doesFileExist f
     h <- openFile f AppendMode
-    return $ Consumer (not ex) (T.hPutStrLn h) (hFlush h >> hClose h)
+    let
+        putText txt = do
+            T.hPutStrLn h txt
+            hFlush h
+    return $ Consumer (not ex) putText (hFlush h >> hClose h)
