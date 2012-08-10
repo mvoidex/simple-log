@@ -14,7 +14,7 @@ test :: ReaderT Log IO ()
 test = scope "test" $ do
     log Trace "Trace message"
     log Info "Starting test"
-    s <- liftIO T.getLine
+    s &lt;- liftIO T.getLine
     when (T.null s) $ log Error "Oh no!"
     log Trace $ T.concat ["Your input: ", s]
 </pre>
