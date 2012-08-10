@@ -12,7 +12,7 @@ Cabal-version:        >= 1.6
 Library
   HS-Source-Dirs: src
   Build-Depends:
-    base >= 4.0,
+    base >= 4.0 && < 5,
     containers,
     deepseq,
     time,

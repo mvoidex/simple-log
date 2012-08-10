@@ -41,7 +41,7 @@ But that's not a big problem.
 There are three scope functions: 'scope_', 'scope' and 'scoper'.
 'scope_' is basic function. 'scope' catches all exceptions and logs error with it, then rethrows. 'scoper' is like 'scope', but logs (with TRACE level) result of do-block.
 
-Of course, scope can be nested:
+Of course, scopes can be nested:
 
 <pre>
 test :: ReaderT Log IO ()
@@ -82,7 +82,7 @@ run = do
     withLog l test
 </pre>
 
-Politics sets 'low' and 'high' levels. By default, both 'low' and 'high' are both INFO.
+Politics sets 'low' and 'high' levels. By default, 'low' and 'high' are both INFO.
 Levels below 'low' are "traces" (TRACE and DEBUG by default).
 Levels above 'high' are "errors" (WARN, ERROR and FATAL by default).
 
