@@ -78,7 +78,7 @@ rules = []
 
 run :: IO ()
 run = do
-    l <- newLog defaultPolitics rules [logger text console]
+    l &lt;- newLog defaultPolitics rules [logger text console]
     withLog l test
 </pre>
 
