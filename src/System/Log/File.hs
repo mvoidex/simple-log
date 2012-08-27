@@ -13,6 +13,7 @@ file :: FilePath -> IO (Consumer Text)
 file f = do
     ex <- doesFileExist f
     h <- openFile f AppendMode
+    hSetBuffering h LineBuffering
     let
         putText txt = do
             T.hPutStrLn h txt
