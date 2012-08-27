@@ -1,7 +1,7 @@
 module System.Log.Base (
     Level(..),
     Politics(..), Rule(..), Rules,
-    defaultPolitics,
+    defaultPolitics, debugPolitics, tracePolitics, silentPolitics,
     rule, absolute, relative,
     politics, low, high,
     Message(..),
@@ -43,7 +43,19 @@ data Politics = Politics {
 
 -- | Default politics
 defaultPolitics :: Politics
-defaultPolitics = Politics Info Info
+defaultPolitics = Politics Info Warning
+
+-- | Debug politics
+debugPolitics :: Politics
+debugPolitics = Politics Debug Info
+
+-- | Trace politics
+tracePolitics :: Politics
+tracePolitics = Politics Trace Info
+
+-- | Silent politics
+silentPolitics :: Politics
+silentPolitics = Politics Info Fatal
 
 -- | Rule for politics
 data Rule = Rule {
