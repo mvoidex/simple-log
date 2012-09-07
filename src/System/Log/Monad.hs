@@ -7,7 +7,6 @@ module System.Log.Monad (
 import Prelude hiding (log, catch)
 
 import Control.Concurrent.Chan
-import Control.DeepSeq
 import Control.Exception (SomeException)
 import Control.Monad.IO.Class
 import Control.Monad.Reader
@@ -30,7 +29,7 @@ withLog :: Log -> ReaderT Log m a -> m a
 withLog l act = runReaderT act l
 
 log :: (MonadLog m) => Level -> Text -> m ()
-log l msg = msg `deepseq` do
+log l msg = do
     (Log post) <- askLog
     tm <- liftIO getCurrentTime
     liftIO $ post $ PostMessage (Message tm l [] msg)

@@ -30,6 +30,7 @@ import qualified Data.Map as M
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
+import Data.String
 
 -- | Level of message
 data Level = Trace | Debug | Info | Warning | Error | Fatal
@@ -96,6 +97,9 @@ data Message = Message {
     messageText :: Text }
         deriving (Eq, Ord, Read, Show)
 
+instance NFData Message where
+    rnf (Message t l p m) = t `seq` l `seq` rnf p `seq` rnf m
+
 -- | Converts message some representation
 data Converter a = Converter {
     initial :: a,
@@ -135,17 +139,24 @@ newLog ps rs ls = do
     cts <- getChanContents ch
     let
         msgs = flatten . rules rs ps [] . entries $ cts
+        loggerLog' l m = E.handle onError (m `deepseq` loggerLog l m) where
+            onError :: E.SomeException -> IO ()
+            onError e = E.handle ignoreError $ do
+                tm <- getCurrentTime
+                loggerLog l $ Message tm Error [] $ fromString $ "Exception during logging message: " ++ show e
+            ignoreError :: E.SomeException -> IO ()
+            ignoreError _ = return ()
         startLog l = do
             l' <- l
             forkIO $ E.finally
-                (mapM_ (loggerLog l') msgs)
+                (mapM_ (loggerLog' l') msgs)
                 (loggerClose l')
     mapM_ startLog ls
     return $ Log $ writeChan ch
 
 -- | Write message to log
 writeLog :: Log -> Level -> Text -> IO ()
-writeLog (Log post) l msg = msg `deepseq` do
+writeLog (Log post) l msg = do
     tm <- getCurrentTime
     post $ PostMessage (Message tm l [] msg)
 
