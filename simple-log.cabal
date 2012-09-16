@@ -1,6 +1,7 @@
 Name:                 simple-log
 Version:              0.1
 Synopsis:             Simple log for Haskell
+Description:          Simple log library for Haskell
 License:              BSD3
 Author:               Alexandr `Voidex` Ruchkin
 Homepage:             http://github.com/mvoidex/simple-log
