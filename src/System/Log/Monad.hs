@@ -30,14 +30,15 @@ withLog l act = runReaderT act l
 
 log :: (MonadLog m) => Level -> Text -> m ()
 log l msg = do
-    (Log post) <- askLog
+    (Log post _) <- askLog
     tm <- liftIO getCurrentTime
     liftIO $ post $ PostMessage (Message tm l [] msg)
 
 scope_ :: (MonadLog m) => Text -> m a -> m a
 scope_ s act = do
-    (Log post) <- askLog
-    bracket_ (liftIO $ post $ EnterScope s) (liftIO $ post LeaveScope) act
+    (Log post getRules) <- askLog
+    rs <- liftIO getRules
+    bracket_ (liftIO $ post $ EnterScope s rs) (liftIO $ post LeaveScope) act
 
 -- | Scope with log all exceptions
 scope :: (MonadLog m) => Text -> m a -> m a

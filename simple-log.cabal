@@ -26,6 +26,7 @@ Library
   Exposed-Modules:
     System.Log
     System.Log.Base
+    System.Log.Config
     System.Log.Monad
     System.Log.Text
     System.Log.HTML

@@ -1,9 +1,12 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module System.Log.Base (
     Level(..),
     Politics(..), Rule(..), Rules,
     defaultPolitics, debugPolitics, tracePolitics, silentPolitics,
-    rule, absolute, relative,
-    politics, low, high,
+    rule, absolute, relative, child, root, path,
+    (%=),
+    politics, use, low, high,
     Message(..),
     Converter(..), Consumer(..),
     Entry(..), Command(..),
@@ -19,6 +22,7 @@ module System.Log.Base (
 
 import Prelude hiding (log)
 
+import Control.Applicative
 import Control.Arrow
 import qualified Control.Exception as E
 import Control.Concurrent
@@ -69,17 +73,54 @@ type Rules = [Rule]
 rule :: ([Text] -> Bool) -> (Politics -> Politics) -> Rule
 rule = Rule
 
--- | Absolute scope-path rule
-absolute :: [Text] -> (Politics -> Politics) -> Rule
-absolute path = rule (== reverse path)
+-- | Absolute scope-path
+absolute :: [Text] -> [Text] -> Bool
+absolute path = (== path)
 
--- | Relative scope-path rule
-relative :: [Text] -> (Politics -> Politics) -> Rule
-relative path = rule (reverse path `isPrefixOf`)
+-- | Relative scope-path
+relative :: [Text] -> [Text] -> Bool
+relative path = (path `isSuffixOf`)
+
+-- | Scope-path for child
+child :: ([Text] -> Bool) -> [Text] -> Bool
+child r [] = False
+child r (_:ps) = r ps
+
+-- | Root scope-path
+root :: [Text] -> Bool
+root = null
+
+-- | Scope-path by text
+--
+-- @
+-- \/ -- root
+-- foo\/bar -- relative
+-- \/foo\/bar -- absolute
+-- foo\/bar\/ -- child of relative
+-- \/foo\/bar\/ -- child of absolute
+-- @
+--
+path :: Text -> ([Text] -> Bool)
+path "/" = root
+path p = path' $ T.split (== '/') p where
+    path' ps
+        | null ps = const False
+        | T.null (head ps) && T.null (last ps) = child . absolute . init . tail $ ps
+        | T.null (head ps) = absolute . tail $ ps
+        | T.null (last ps) = child . relative . init $ ps
+        | otherwise = relative ps
+
+-- | Rule by path
+(%=) :: Text -> (Politics -> Politics) -> Rule
+p %= r = rule (path p) r
 
 -- | Just set new politics
 politics :: Level -> Level -> Politics -> Politics
 politics l h _ = Politics l h
+
+-- | Use predefined politics
+use :: Politics -> Politics -> Politics
+use p _ = p
 
 -- | Set new low level
 low :: Level -> Politics -> Politics
@@ -125,73 +166,77 @@ logger converter consumer = do
 
 -- | Log
 data Log = Log {
-    logPost :: Command -> IO () }
+    logPost :: Command -> IO (),
+    logRules :: IO Rules }
 
 -- | Empty log
 noLog :: Log
-noLog = Log $ const (return ())
+noLog = Log (const (return ())) (return [])
+
+-- | Type to initialize rule updater
+type RulesLoad = IO (IO Rules)
 
 -- | Create log
-newLog :: Politics -> Rules -> [IO Logger] -> IO Log
-newLog _ _ [] = return noLog
-newLog ps rs ls = do
+newLog :: RulesLoad -> [IO Logger] -> IO Log
+newLog _ [] = return noLog
+newLog rsInit ls = do
     ch <- newChan
     cts <- getChanContents ch
+    rs <- rsInit
+    r <- rs
     let
-        msgs = flatten . rules rs ps [] . entries $ cts
+        msgs = flatten . rules r [] . entries $ cts
         loggerLog' l m = E.handle onError (m `deepseq` loggerLog l m) where
             onError :: E.SomeException -> IO ()
             onError e = E.handle ignoreError $ do
                 tm <- getCurrentTime
-                loggerLog l $ Message tm Error [] $ fromString $ "Exception during logging message: " ++ show e
+                loggerLog l $ Message tm Error ["*"] $ fromString $ "Exception during logging message: " ++ show e
             ignoreError :: E.SomeException -> IO ()
             ignoreError _ = return ()
-        startLog l = do
-            l' <- l
-            forkIO $ E.finally
-                (mapM_ (loggerLog' l') msgs)
-                (loggerClose l')
+        startLog l = forkIO $ E.bracket l loggerClose rootScope where
+            rootScope l' = mapM_ (loggerLog' l') msgs
     mapM_ startLog ls
-    return $ Log $ writeChan ch
+    return $ Log (writeChan ch) rs
 
 -- | Write message to log
 writeLog :: Log -> Level -> Text -> IO ()
-writeLog (Log post) l msg = do
+writeLog (Log post _) l msg = do
     tm <- getCurrentTime
     post $ PostMessage (Message tm l [] msg)
 
 -- | New log-scope
 scopeLog_ :: Log -> Text -> IO a -> IO a
-scopeLog_ (Log post) s act = E.bracket_ (post $ EnterScope s) (post LeaveScope) act
+scopeLog_ (Log post getRules) s act = do
+    rs <- getRules
+    E.bracket_ (post $ EnterScope s rs) (post LeaveScope) act
 
 -- | New log-scope with lifting exceptions as errors
 scopeLog :: Log -> Text -> IO a -> IO a
 scopeLog l s act = scopeLog_ l s (E.catch act onError) where
     onError :: E.SomeException -> IO a
     onError e = do
-        writeLog l Error $ T.pack $ "Scope leaves with exception: " ++ show e
+        writeLog l Error $ fromString $ "Scope leaves with exception: " ++ show e
         E.throwIO e
 
 -- | New log-scope with tracing scope result
 scoperLog :: Show a => Log -> Text -> IO a -> IO a
 scoperLog l s act = do
     r <- scopeLog l s act
-    writeLog l Trace $ T.concat [T.pack "Scope ", s, T.pack " leaves with result: ", T.pack $ show r]
+    writeLog l Trace $ T.concat ["Scope ", s, " leaves with result: ", fromString $ show r]
     return r
 
 -- | Log entry, scope or message
 data Entry =
     Entry Message |
-    Scope Text [Entry]
-        deriving (Eq, Read, Show)
+    Scope Text Rules [Entry]
 
-foldEntry :: (Message -> a) -> (Text -> [a] -> a) -> Entry -> a
+foldEntry :: (Message -> a) -> (Text -> Rules -> [a] -> a) -> Entry -> a
 foldEntry r s (Entry m) = r m
-foldEntry r s (Scope t es) = s t (map (foldEntry r s) es)
+foldEntry r s (Scope t rs es) = s t rs (map (foldEntry r s) es)
 
 -- | Command to logger
 data Command =
-    EnterScope Text |
+    EnterScope Text Rules |
     LeaveScope |
     PostMessage Message
 
@@ -199,23 +244,26 @@ data Command =
 entries :: [Command] -> [Entry]
 entries = fst . entries' where
     entries' [] = ([], [])
-    entries' (EnterScope s : cs) = first (Scope s rs :) $ entries' cs' where
+    entries' (EnterScope s scopeRules : cs) = first (Scope s scopeRules rs :) $ entries' cs' where
         (rs, cs') = entries' cs
     entries' (LeaveScope : cs) = ([], cs)
     entries' (PostMessage m : cs) = first (Entry m :) $ entries' cs
 
 -- | Flattern entries to raw list of messages
 flatten :: [Entry] -> [Message]
-flatten = concatMap $ foldEntry return (\s ms -> map (addScope s) (concat ms)) where
+flatten = concatMap $ foldEntry return (\s _ ms -> map (addScope s) (concat ms)) where
     addScope s (Message tm l p str) = Message tm l (s : p) str
 
 -- | Apply rules
-rules :: Rules -> Politics -> [Text] -> [Entry] -> [Entry]
-rules rs ps path = map untraceScope . concatEntries . first (partition isNotTrace) . break isError where
+rules :: Rules -> [Text] -> [Entry] -> [Entry]
+rules rs rpath = map untraceScope . concatEntries . first (partition isNotTrace) . break isError where
     -- untrace inner scopes
     untraceScope (Entry msg) = Entry msg
-    untraceScope (Scope t es) = Scope t $ rules rs (apply t ps) (t : path) es
-    
+    untraceScope (Scope t scopeRules es) = Scope t scopeRules $ rules scopeRules (t : rpath) es
+
+    -- current politics
+    ps = apply rs (reverse rpath) defaultPolitics
+
     -- If there is no errors, use only infos and scopes and drop all traces
     -- otherwise concat all messages
     concatEntries ((x, y), z) = x ++ if null z then [] else y ++ z
@@ -224,9 +272,11 @@ rules rs ps path = map untraceScope . concatEntries . first (partition isNotTrac
     isNotTrace = onLevel True (>= politicsLow ps)
     
     onLevel :: a -> (Level -> a) -> Entry -> a
-    onLevel v f (Scope _ _) = v
+    onLevel v f (Scope _ _ _) = v
     onLevel v f (Entry (Message _ l _ _)) = f l
-    
-    -- apply rules
-    apply :: Text -> Politics -> Politics
-    apply sub = foldr (.) id $ map rulePolitics $ filter (`rulePath` (sub : path)) rs
+
+-- | Apply rules to path
+apply :: Rules -> [Text] -> Politics -> Politics
+apply rs path = foldr (.) id . map applier . reverse . inits $ path where
+    applier :: [Text] -> Politics -> Politics
+    applier spath = foldr (.) id . map rulePolitics . filter (`rulePath` spath) $ rs
