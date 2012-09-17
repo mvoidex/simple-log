@@ -114,7 +114,7 @@
 --    absolute [\"bar\", \"baz\", \"foo\"] $ low Trace]
 -- @
 -- 
--- Politics will be changed only for scope \"foo\", which is nested directly in \"baz\", which is nested in \"bar\".
+-- Politics will be changed only for scope \"foo\", which is nested directly in \"baz\", which is nested in \"bar\", which is top scope.
 --
 -- Another way to define rule is using special functions from "System.Log.Config" module:
 --
