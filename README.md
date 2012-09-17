@@ -82,7 +82,7 @@ run = do
     withLog l test
 </pre>
 
-Politics sets 'low' and 'high' levels. By default, 'low' and 'high' are both INFO.
+Politics sets 'low' and 'high' levels. By default, 'low' and 'high' are INFO and WARN.
 Levels below 'low' are "traces" (TRACE and DEBUG by default).
 Levels above 'high' are "errors" (WARN, ERROR and FATAL by default).
 

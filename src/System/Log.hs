@@ -82,7 +82,7 @@
 --    withLog l test
 -- @
 --
--- Politics sets 'low' and 'high' levels. By default, 'low' and 'high' are both INFO. Levels below 'low' are "traces" ('Trace' and 'Debug' by default). Levels above 'high' are "errors" ('Warn', 'Error' and 'Fatal' by default).
+-- Politics sets 'low' and 'high' levels. By default, 'low' and 'high' are INFO and WARN. Levels below 'low' are "traces" ('Trace' and 'Debug' by default). Levels above 'high' are "errors" ('Warn', 'Error' and 'Fatal' by default).
 --
 -- If you set 'low' to 'Trace', all messages will be written. If you set 'low' to 'Debug' and 'high' to 'Fatal', "traces" (in this case only 'Trace') will be never written.
 --
