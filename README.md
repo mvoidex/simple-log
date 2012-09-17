@@ -78,7 +78,7 @@ rules = []
 
 run :: IO ()
 run = do
-    l &lt;- newLog defaultPolitics rules [logger text console]
+    l &lt;- newLog (constant rules) [logger text console]
     withLog l test
 </pre>
 
@@ -94,19 +94,53 @@ Sometimes we need to trace function, but we don't want to write all traces. We c
 For example, we want to trace function 'foo':
 <pre>
 rules = [
-    relative ["foo"] $ low Trace]
+    rule root $ use defaultPolitics,
+    rule (relative ["foo"]) $ low Trace]
 </pre>
 From now all scope-paths, that contains "foo" (all scopes with name "foo") will have politics with 'low' set to Trace.
 
 We may adjust politics for scope 'foo', that is nested directly in scope 'quux':
 <pre>
 rules = [
-    relative ["quux", "foo"] $ low Trace]
+    rule root $ use defaultPolitics,
+    rule (relative ["quux", "foo"]) $ low Trace]
 </pre>
 
 And, of course, we may specify absolute path:
 <pre>
 rules = [
-    absolute ["bar", "baz", "foo"] $ low Trace]
+    rule root $ use defaultPolitics,
+    rule (absolute ["bar", "baz", "foo"]) $ low Trace]
 </pre>
 Politics will be changed only for scope "foo", which is nested directly in "baz", which is nested in "bar".
+
+Another way to define rule is using special functions from "System.Log.Config" module:
+<pre>
+rules = [
+    "/" %= use defaultPolitics,
+    "/bar/baz/foo" %= low Trace,
+    "quux/foo" %= low Debug]
+</pre>
+
+One more way to use special syntax for rules:
+<pre>
+rules = parseRules_ $ T.unlines [
+    "/: use default",
+    "/bar/baz/foo: low trace",
+    "quux/foo: low debug"]
+</pre>
+
+Here "/" is for root, "/path" for absolute path, "path" for relative and "path/" for child of "path" (which may be also prefixed with "/" to be absolute)
+
+This syntax is useful to config log by file. Having file "log.cfg":
+<pre>
+/: use default
+/bar/baz/foo: low trace
+quux/foo: low debug
+</pre>
+
+We can use it to config log
+<pre>
+    l <- newLog (fileCfg "log.cfg" 60) [logger text console]
+</pre>
+where 60 is period (in seconds) of auto reload or 0 for no reloading.

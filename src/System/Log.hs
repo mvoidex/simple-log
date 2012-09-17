@@ -120,15 +120,15 @@
 --
 -- @
 --rules = [
---    \"\/\" = use defaultPolitics,
+--    \"\/\" %= use defaultPolitics,
 --    \"\/bar\/baz\/foo\" %= low Trace,
 --    \"quux\/foo\" %= low Debug]
 -- @
 --
--- Or one more way to use special syntax for rules:
+-- One more way to use special syntax for rules:
 --
 -- @
---rules = parseRules $ unlines [
+--rules = parseRules_ $ T.unlines [
 --    \"\/: use default\",
 --    \"\/bar\/baz\/foo: low trace\",
 --    \"quux\/foo: low debug\"]
@@ -136,7 +136,7 @@
 --
 -- Here \"\/\" is for root, \"\/path\" for absolute path, \"path\" for relative and \"path\/\" for child of \"path\" (which may be also prefixed with \"\/\" to be absolute)
 --
--- This syntax is useful to config log by file. Having file \"log.cfg\" with this content:
+-- This syntax is useful to config log by file. Having file \"log.cfg\":
 --
 -- @
 --\/: use default
@@ -144,13 +144,13 @@
 --quux\/foo: low debug
 -- @
 --
--- we can use it to config log
+-- We can use it to config log
 --
 -- @
 --    l <- newLog (fileCfg \"log.cfg\" 60) [logger text console]
 -- @
 -- 
--- where 60 it period (in seconds) of auto reload or 0 for no reloading.
+-- where 60 is period (in seconds) of auto reload or 0 for no reloading.
 --
 module System.Log (
     module System.Log.Base,
