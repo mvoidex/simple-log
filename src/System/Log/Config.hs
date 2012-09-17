@@ -44,9 +44,9 @@ instance Error Text where
 -- Examples:
 --
 -- @
---\/: use trace
---\/foo: low trace
---foo\/bar\/quux: use silent
+-- \/: use trace
+-- \/foo: low trace
+-- foo\/bar\/quux: use silent
 -- @
 --
 parseRule :: Text -> Writer [Text] Rule

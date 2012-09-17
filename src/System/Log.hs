@@ -139,9 +139,9 @@
 -- This syntax is useful to config log by file. Having file \"log.cfg\":
 --
 -- @
---\/: use default
---\/bar\/baz\/foo: low trace
---quux\/foo: low debug
+-- \/: use default
+-- \/bar\/baz\/foo: low trace
+-- quux\/foo: low debug
 -- @
 --
 -- We can use it to config log
