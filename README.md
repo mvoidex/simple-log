@@ -84,7 +84,7 @@ run = do
 
 Politics sets 'low' and 'high' levels. By default, 'low' and 'high' are INFO and WARN.
 Levels below 'low' are "traces" (TRACE and DEBUG by default).
-Levels above 'high' are "errors" (WARN, ERROR and FATAL by default).
+Levels above 'high' are "errors" (ERROR and FATAL by default).
 
 If you set 'low' to TRACE, all messages will be written.
 If you set 'low' to DEBUG and 'high' to FATAL, "traces" (in this case only TRACE) will be never written.
