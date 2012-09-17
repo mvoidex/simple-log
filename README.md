@@ -141,6 +141,6 @@ quux/foo: low debug
 
 We can use it to config log
 <pre>
-    l <- newLog (fileCfg "log.cfg" 60) [logger text console]
+    l &lt;- newLog (fileCfg "log.cfg" 60) [logger text console]
 </pre>
 where 60 is period (in seconds) of auto reload or 0 for no reloading.
