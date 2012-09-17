@@ -12,6 +12,7 @@ module System.Log.Base (
     Entry(..), Command(..),
     entries, flatten, rules,
     Logger(..), logger,
+    RulesLoad,
     Log(..), noLog,
     newLog,
     writeLog,
