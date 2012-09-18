@@ -12,10 +12,6 @@ import System.IO
 file :: FilePath -> IO (Consumer Text)
 file f = do
     ex <- doesFileExist f
-    h <- openFile f AppendMode
-    hSetBuffering h LineBuffering
     let
-        putText txt = do
-            T.hPutStrLn h txt
-            hFlush h
-    return $ Consumer (not ex) putText (hFlush h >> hClose h)
+        putText txt = withFile f AppendMode $ \h -> T.hPutStrLn h txt
+    return $ Consumer (not ex) putText (return ())
