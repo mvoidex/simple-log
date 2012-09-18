@@ -1,4 +1,50 @@
--- | The main ideas of this log library are:
+-- | Fast start
+--
+-- The best way is to define config file, which is auto reloaded periodically, so you can change config while program is running to turn on tracing some function.
+--
+-- Typical config file with rule for root scope (see below for explanation):
+--
+-- @
+-- \/: use default
+-- @
+--
+-- If you want to trace scope named \"foo\", just add:
+--
+-- @
+-- \/: use default
+-- foo: low trace
+-- @
+--
+-- Now \"foo\" and children will be traced even there are no errors. To trace only \"foo\" without children:
+--
+-- @
+-- \/: use default
+-- foo: low trace
+-- foo\/: use default
+-- @
+--
+-- \"foo\/\" defines rules for children of \"foo\".
+--
+-- Note, that by default all function will log their traces on error, so there is no need to turn on trace manually. You may want to turn on tracing when there are logic errors present without explicit errors (exceptions, or messages with error level).
+--
+-- Now we can run our log with auto reloading config every 60 seconds:
+--
+-- @
+--run :: IO ()
+--run = do
+--    l <- newLog (fileCfg \"log.cfg\" 60) [logger text (file \"out.log\")]
+--    withLog l yourFunction
+-- @
+--
+-- And use it:
+--
+-- @
+--yourFunction :: (MonadLog m) => m ()
+--yourFunction = scope \"your\" $ do
+--    log Trace \"Hello from your function\"
+-- @
+--
+-- The main ideas of this log library are:
 --
 --     * we don't want to see all unnecessary trace messages when there are no errors,
 --
@@ -96,7 +142,7 @@
 --    rule (relative [\"foo\"]) $ low Trace]
 -- @
 --
--- From now all scope-paths, that contains \"foo\" (all scopes with name "foo") will have politics with 'low' set to Trace.
+-- From now all scope-paths, that contains \"foo\" (all scopes with name \"foo\") will have politics with 'low' set to Trace.
 --
 -- We may adjust politics for scope 'foo', that is nested directly in scope 'quux':
 --

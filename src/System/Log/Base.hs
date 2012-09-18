@@ -133,11 +133,11 @@ high h (Politics l _) = Politics l h
 
 -- | Log message
 data Message = Message {
-    messageTime :: UTCTime,
+    messageTime :: ZonedTime,
     messageLevel :: Level,
     messagePath :: [Text],
     messageText :: Text }
-        deriving (Eq, Ord, Read, Show)
+        deriving (Read, Show)
 
 instance NFData Message where
     rnf (Message t l p m) = t `seq` l `seq` rnf p `seq` rnf m
@@ -190,7 +190,7 @@ newLog rsInit ls = do
         loggerLog' l m = E.handle onError (m `deepseq` loggerLog l m) where
             onError :: E.SomeException -> IO ()
             onError e = E.handle ignoreError $ do
-                tm <- getCurrentTime
+                tm <- getZonedTime
                 loggerLog l $ Message tm Error ["*"] $ fromString $ "Exception during logging message: " ++ show e
             ignoreError :: E.SomeException -> IO ()
             ignoreError _ = return ()
@@ -202,7 +202,7 @@ newLog rsInit ls = do
 -- | Write message to log
 writeLog :: Log -> Level -> Text -> IO ()
 writeLog (Log post _) l msg = do
-    tm <- getCurrentTime
+    tm <- getZonedTime
     post $ PostMessage (Message tm l [] msg)
 
 -- | New log-scope

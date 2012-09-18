@@ -10,7 +10,7 @@ import System.Locale
 import System.Log.Base
 
 -- | Default time format
-defaultTimeFormat = "%d/%m/%y %T"
+defaultTimeFormat = "%d/%m/%y %T %z"
 
 -- | Text log converter with time format
 textFmt :: String -> Converter Text

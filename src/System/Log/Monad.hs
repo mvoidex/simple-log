@@ -31,7 +31,7 @@ withLog l act = runReaderT act l
 log :: (MonadLog m) => Level -> Text -> m ()
 log l msg = do
     (Log post _) <- askLog
-    tm <- liftIO getCurrentTime
+    tm <- liftIO getZonedTime
     liftIO $ post $ PostMessage (Message tm l [] msg)
 
 scope_ :: (MonadLog m) => Text -> m a -> m a
