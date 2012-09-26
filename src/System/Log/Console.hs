@@ -3,7 +3,6 @@ module System.Log.Console (
     ) where
 
 import Data.Text (Text)
-import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import System.Log.Base
 

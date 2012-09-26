@@ -6,7 +6,6 @@ module System.Log.Monad (
 
 import Prelude hiding (log, catch)
 
-import Control.Concurrent.Chan
 import Control.Exception (SomeException)
 import Control.Monad.IO.Class
 import Control.Monad.Reader

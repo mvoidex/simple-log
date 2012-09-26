@@ -23,15 +23,12 @@ module System.Log.Base (
 
 import Prelude hiding (log)
 
-import Control.Applicative
 import Control.Arrow
 import qualified Control.Exception as E
 import Control.Concurrent
-import Control.Concurrent.Chan
 import Control.DeepSeq
 import Control.Monad
 import Data.List
-import qualified Data.Map as M
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
@@ -76,15 +73,15 @@ rule = Rule
 
 -- | Absolute scope-path
 absolute :: [Text] -> [Text] -> Bool
-absolute path = (== path)
+absolute p = (== p)
 
 -- | Relative scope-path
 relative :: [Text] -> [Text] -> Bool
-relative path = (path `isSuffixOf`)
+relative p = (p `isSuffixOf`)
 
 -- | Scope-path for child
 child :: ([Text] -> Bool) -> [Text] -> Bool
-child r [] = False
+child _ [] = False
 child r (_:ps) = r ps
 
 -- | Root scope-path
@@ -232,7 +229,7 @@ data Entry =
     Scope Text Rules [Entry]
 
 foldEntry :: (Message -> a) -> (Text -> Rules -> [a] -> a) -> Entry -> a
-foldEntry r s (Entry m) = r m
+foldEntry r _ (Entry m) = r m
 foldEntry r s (Scope t rs es) = s t rs (map (foldEntry r s) es)
 
 -- | Command to logger
@@ -273,11 +270,11 @@ rules rs rpath = map untraceScope . concatEntries . first (partition isNotTrace)
     isNotTrace = onLevel True (>= politicsLow ps)
     
     onLevel :: a -> (Level -> a) -> Entry -> a
-    onLevel v f (Scope _ _ _) = v
-    onLevel v f (Entry (Message _ l _ _)) = f l
+    onLevel v _ (Scope _ _ _) = v
+    onLevel _ f (Entry (Message _ l _ _)) = f l
 
 -- | Apply rules to path
 apply :: Rules -> [Text] -> Politics -> Politics
-apply rs path = foldr (.) id . map applier . reverse . inits $ path where
+apply rs = foldr (.) id . map applier . reverse . inits where
     applier :: [Text] -> Politics -> Politics
     applier spath = foldr (.) id . map rulePolitics . filter (`rulePath` spath) $ rs
