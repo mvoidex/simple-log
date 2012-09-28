@@ -3,6 +3,7 @@ Version:              0.1.3
 Synopsis:             Simple log for Haskell
 Description:          Log library for Haskell with removing unnecessary traces
 License:              BSD3
+License-file:         LICENSE
 Author:               Alexandr `Voidex` Ruchkin
 Homepage:             http://github.com/mvoidex/simple-log
 Maintainer:           voidex@live.com

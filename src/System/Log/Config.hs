@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module System.Log.Config (
     parseRule, parseRules,
@@ -19,10 +18,6 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
 import System.Log.Base
-
-instance Error Text where
-    noMsg = strMsg noMsg
-    strMsg = T.pack
 
 -- | Parse rule
 --
@@ -57,7 +52,7 @@ parseRule txt = do
     where
         (p, r) = T.break (== ':') txt
         parseUses uses = do
-            tell fails
+            tell $ map T.pack fails
             return $ foldr (.) id oks
             where
                 (fails, oks) = (lefts &&& rights) . map (parseUse . T.strip) . T.split (== ',') $ uses
@@ -67,13 +62,13 @@ parseRule txt = do
             ["high", v] -> high <$> value v
             ["set", l, h] -> politics <$> value l <*> value h
             ["use", v] -> use <$> predefined v
-            _ -> throwError $ T.concat ["Unable to parse: ", u]
+            _ -> throwError $ concat ["Unable to parse: ", T.unpack u]
 
         value v = maybe noValue return $ lookup v values where
-            noValue = throwError $ T.concat ["Invalid value: ", v]
+            noValue = throwError $ concat ["Invalid value: ", T.unpack v]
 
         predefined v = maybe noPredefined return $ lookup v predefineds where
-            noPredefined = throwError $ T.concat ["Invalid predefined: ", v]
+            noPredefined = throwError $ concat ["Invalid predefined: ", T.unpack v]
 
 parseRules :: Text -> Writer [Text] Rules
 parseRules = mapM parseRule . filter (not . T.null . T.strip) . T.lines
