@@ -220,7 +220,7 @@ scopeLog l s act = scopeLog_ l s (E.catch act onError) where
 scoperLog :: Show a => Log -> Text -> IO a -> IO a
 scoperLog l s act = do
     r <- scopeLog l s act
-    writeLog l Trace $ T.concat ["Scope ", s, " leaves with result: ", fromString $ show r]
+    writeLog l Trace $ T.concat ["Scope ", s, " leaves with result: ", fromString . show $ r]
     return r
 
 -- | Log entry, scope or message

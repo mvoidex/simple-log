@@ -1,7 +1,18 @@
-{-# LANGUAGE FlexibleInstances, UndecidableInstances #-}
+{-# LANGUAGE OverloadedStrings, FlexibleInstances, UndecidableInstances #-}
 
 module System.Log.Monad (
-    withNoLog, withLog, log, scope_, scope, scoper, MonadLog(..)
+    withNoLog,
+    withLog,
+    log,
+    scope_,
+    scope,
+    scopeM,
+    scoper,
+    scoperM,
+    ignoreError,
+    ignoreErrorM,
+    trace,
+    MonadLog(..)
     ) where
 
 import Prelude hiding (log, catch)
@@ -9,7 +20,9 @@ import Prelude hiding (log, catch)
 import Control.Exception (SomeException)
 import Control.Monad.IO.Class
 import Control.Monad.Reader
+import Control.Monad.Error
 import Control.Monad.CatchIO
+import Data.String
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
@@ -41,15 +54,48 @@ scope_ s act = do
 
 -- | Scope with log all exceptions
 scope :: (MonadLog m) => Text -> m a -> m a
-scope s act = scope_ s (catch act onError) where
+scope s act = scope_ s $ catch act onError where
     onError :: (MonadLog m) => SomeException -> m a
     onError e = do
-        log Error $ T.pack $ "Scope leaves with exception: " ++ show e
+        log Error $ T.concat ["Scope leaves with exception: ", fromString . show $ e]
         throw e
 
+-- | Scope with log exceptions from MonadError
+scopeM :: (Error e, Show e, MonadLog m, MonadError e m) => Text -> m a -> m a
+scopeM s act = scope s $ catchError act onError where
+    onError :: (Error e, Show e, MonadLog m, MonadError e m) => e -> m a
+    onError e = do
+        log Error $ T.concat ["Scope leaves with exception: ", fromString . show $ e]
+        throwError e
+
 -- | Scope with tracing result
-scoper :: (MonadLog m, Show a) => Text -> m a -> m a
+scoper :: (Show a, MonadLog m) => Text -> m a -> m a
 scoper s act = do
     r <- scope s act
-    log Trace $ T.concat [T.pack "Scope ", s, T.pack " leaves with result: ", T.pack $ show r]
+    log Trace $ T.concat ["Scope ", s, " leaves with result: ", fromString . show $ r]
     return r
+
+scoperM :: (Error e, Show e, Show a, MonadLog m, MonadError e m) => Text -> m a -> m a
+scoperM s act = do
+    r <- scopeM s act
+    log Trace $ T.concat ["Scope", s, " leaves with resul: ", fromString . show $ r]
+    return r
+
+-- | Ignore error
+ignoreError :: (MonadLog m) => m () -> m ()
+ignoreError act = catch act onError where
+    onError :: (MonadLog m) => SomeException -> m ()
+    onError _ = return ()
+
+-- | Ignore MonadError error
+ignoreErrorM :: (Error e, MonadLog m, MonadError e m) => m () -> m ()
+ignoreErrorM act = catchError act onError where
+    onError :: (Error e, MonadLog m, MonadError e m) => e -> m ()
+    onError _ = return ()
+
+-- | Trace value
+trace :: (Show a, MonadLog m) => Text -> m a -> m a
+trace name act = do
+    v <- act
+    log Trace $ T.concat [name, " = ", fromString . show $ v]
+    return v
