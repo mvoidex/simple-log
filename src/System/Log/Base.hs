@@ -29,6 +29,7 @@ import Control.Concurrent
 import Control.DeepSeq
 import Control.Monad
 import Data.List
+import qualified Data.Map as M
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
@@ -175,15 +176,41 @@ noLog = Log (const (return ())) (return [])
 type RulesLoad = IO (IO Rules)
 
 -- | Create log
+--
+-- Messages from distinct threads are splitted in several chans, where they are processed, and then messages combined back and sent to log-thread
+--
 newLog :: RulesLoad -> [IO Logger] -> IO Log
 newLog _ [] = return noLog
 newLog rsInit ls = do
-    ch <- newChan
+    ch <- newChan :: IO (Chan (ThreadId, Command))
+    chOut <- newChan :: IO (Chan Message)
     cts <- getChanContents ch
+    msgs <- getChanContents chOut
     rs <- rsInit
     r <- rs
+
     let
-        msgs = flatten . rules r [] . entries $ cts
+        -- | Write commands from separate threads to separate channels
+        process :: M.Map ThreadId (Chan Command) -> (ThreadId, Command) -> IO (M.Map ThreadId (Chan Command))
+        process m (thId, cmd) = do
+            thChan <- maybe newThreadChan return $ M.lookup thId m
+            writeChan thChan cmd
+            return $ M.insert thId thChan m
+
+        -- | New chan for thread, accepts commands from thread, writes processed messages to log-thread
+        newThreadChan :: IO (Chan Command)
+        newThreadChan = do
+            thChan <- newChan
+            thCts <- getChanContents thChan
+            _ <- forkIO $ mapM_ (writeChan chOut) $ uncommand thCts
+            return thChan
+
+        -- | Convert commands to messages
+        uncommand :: [Command] -> [Message]
+        uncommand = flatten . rules r [] . entries
+
+        -- | Perform log
+        loggerLog' :: Logger -> Message -> IO ()
         loggerLog' l m = E.handle onError (m `deepseq` loggerLog l m) where
             onError :: E.SomeException -> IO ()
             onError e = E.handle ignoreError $ do
@@ -191,10 +218,21 @@ newLog rsInit ls = do
                 loggerLog l $ Message tm Error ["*"] $ fromString $ "Exception during logging message: " ++ show e
             ignoreError :: E.SomeException -> IO ()
             ignoreError _ = return ()
-        startLog l = forkIO $ E.bracket l loggerClose rootScope where
+
+        -- | Initialize all loggers
+        startLog :: IO Logger -> IO ()
+        startLog l = E.bracket l loggerClose rootScope where
             rootScope l' = mapM_ (loggerLog' l') msgs
-    mapM_ startLog ls
-    return $ Log (writeChan ch) rs
+
+        -- | Write command with myThreadId
+        writeCommand :: Command -> IO ()
+        writeCommand cmd = do
+            i <- myThreadId
+            writeChan ch (i, cmd)
+
+    void $ forkIO $ void $ foldM process M.empty cts
+    mapM_ (forkIO . startLog) ls
+    return $ Log writeCommand rs
 
 -- | Write message to log
 writeLog :: Log -> Level -> Text -> IO ()

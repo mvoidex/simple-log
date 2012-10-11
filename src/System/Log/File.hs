@@ -14,5 +14,7 @@ file f = do
     createDirectoryIfMissing True $ takeDirectory f
     ex <- doesFileExist f
     let
-        putText txt = withFile f AppendMode $ \h -> T.hPutStrLn h txt
+        putText txt = withFile f AppendMode $ \h -> do
+            hSetEncoding h utf8
+            T.hPutStrLn h txt
     return $ Consumer (not ex) putText (return ())
