@@ -6,6 +6,7 @@ module System.Log.Monad (
     log,
     scope_,
     scope,
+    scopeM_,
     scopeM,
     scoper,
     scoperM,
@@ -60,13 +61,26 @@ scope s act = scope_ s $ catch act onError where
         log Error $ T.concat ["Scope leaves with exception: ", fromString . show $ e]
         throw e
 
--- | Scope with log exceptions from MonadError
+-- | Workaround: we must explicitely post 'LeaveScope'
+scopeM_ :: (MonadLog m, MonadError e m) => Text -> m a -> m a
+scopeM_ s act = do
+    (Log post getRules) <- askLog
+    rs <- liftIO getRules
+    let
+        close = liftIO $ post LeaveScope
+    bracket_ (liftIO $ post $ EnterScope s rs) close (catchError act (\e -> close >> throwError e))
+
+-- | Scope with log exceptions from 'MonadError'
+-- | Workaround: we must explicitely post 'LeaveScope'
 scopeM :: (Error e, Show e, MonadLog m, MonadError e m) => Text -> m a -> m a
-scopeM s act = scope s $ catchError act onError where
-    onError :: (Error e, Show e, MonadLog m, MonadError e m) => e -> m a
-    onError e = do
-        log Error $ T.concat ["Scope leaves with exception: ", fromString . show $ e]
-        throwError e
+scopeM s act = scopeM_ s $ catch act' onError' where
+    onError' :: (MonadLog m) => SomeException -> m a
+    onError' e = logE e >> throw e
+    act' = catchError act onError
+    onError :: (MonadLog m, Show e, MonadError e m) => e -> m a
+    onError e = logE e >> throwError e
+    logE :: (MonadLog m, Show e) => e -> m ()
+    logE e = log Error $ T.concat ["Scope leaves with exception: ", fromString . show $ e]
 
 -- | Scope with tracing result
 scoper :: (Show a, MonadLog m) => Text -> m a -> m a
