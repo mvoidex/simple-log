@@ -10,6 +10,7 @@ Maintainer:           voidex@live.com
 Category:             Logging
 Build-type:           Simple
 Cabal-version:        >= 1.6
+Tested-with:          GHC == 7.6.1
 
 Library
   HS-Source-Dirs: src

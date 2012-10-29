@@ -16,7 +16,7 @@ module System.Log.Monad (
     MonadLog(..)
     ) where
 
-import Prelude hiding (log, catch)
+import Prelude hiding (log)
 
 import Control.Exception (SomeException)
 import Control.Monad.IO.Class
