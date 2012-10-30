@@ -22,7 +22,7 @@ import Control.Exception (SomeException)
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.Error
-import Control.Monad.CatchIO
+import Control.Monad.CatchIO as C
 import Data.String
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -55,7 +55,7 @@ scope_ s act = do
 
 -- | Scope with log all exceptions
 scope :: (MonadLog m) => Text -> m a -> m a
-scope s act = scope_ s $ catch act onError where
+scope s act = scope_ s $ C.catch act onError where
     onError :: (MonadLog m) => SomeException -> m a
     onError e = do
         log Error $ T.concat ["Scope leaves with exception: ", fromString . show $ e]
@@ -73,7 +73,7 @@ scopeM_ s act = do
 -- | Scope with log exceptions from 'MonadError'
 -- | Workaround: we must explicitely post 'LeaveScope'
 scopeM :: (Error e, Show e, MonadLog m, MonadError e m) => Text -> m a -> m a
-scopeM s act = scopeM_ s $ catch act' onError' where
+scopeM s act = scopeM_ s $ C.catch act' onError' where
     onError' :: (MonadLog m) => SomeException -> m a
     onError' e = logE e >> throw e
     act' = catchError act onError
@@ -97,7 +97,7 @@ scoperM s act = do
 
 -- | Ignore error
 ignoreError :: (MonadLog m) => m () -> m ()
-ignoreError act = catch act onError where
+ignoreError act = C.catch act onError where
     onError :: (MonadLog m) => SomeException -> m ()
     onError _ = return ()
 
