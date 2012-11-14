@@ -8,10 +8,10 @@ module System.Log.Base (
     (%=),
     politics, use, low, high,
     Message(..),
-    Converter(..), Consumer(..),
+    Converter, Consumer(..),
     Entry(..), Command(..),
     entries, flatten, rules,
-    Logger(..), logger,
+    Logger, logger,
     RulesLoad,
     Log(..), noLog,
     newLog,
@@ -141,27 +141,19 @@ instance NFData Message where
     rnf (Message t l p m) = t `seq` l `seq` rnf p `seq` rnf m
 
 -- | Converts message some representation
-data Converter a = Converter {
-    initial :: a,
-    convert :: Message -> a }
+type Converter a = Message -> a
 
 -- Stores message
 data Consumer a = Consumer {
-    consumerNew :: Bool,
-    consume :: a -> IO (),
-    consumerClose :: IO () }
+    withConsumer :: ((a -> IO ()) -> IO ()) -> IO () }
 
 -- | Logger
-data Logger = Logger {
-    loggerLog :: Message -> IO (),
-    loggerClose :: IO () }
+type Logger = Consumer Message
 
 -- | Convert consumer creater to logger creater
-logger :: Converter a -> IO (Consumer a) -> IO Logger
-logger converter consumer = do
-    c <- consumer
-    when (consumerNew c) $ consume c (initial converter)
-    return $ Logger (consume c . convert converter) (consumerClose c)
+logger :: Converter a -> Consumer a -> Consumer Message
+logger conv (Consumer withCons) = Consumer withCons' where
+    withCons' f = withCons $ \logMsg -> f (logMsg . conv)
 
 -- | Log
 data Log = Log {
@@ -179,7 +171,7 @@ type RulesLoad = IO (IO Rules)
 --
 -- Messages from distinct threads are splitted in several chans, where they are processed, and then messages combined back and sent to log-thread
 --
-newLog :: RulesLoad -> [IO Logger] -> IO Log
+newLog :: RulesLoad -> [Logger] -> IO Log
 newLog _ [] = return noLog
 newLog rsInit ls = do
     ch <- newChan :: IO (Chan (ThreadId, Command))
@@ -210,19 +202,19 @@ newLog rsInit ls = do
         uncommand = flatten . rules r [] . entries
 
         -- | Perform log
-        loggerLog' :: Logger -> Message -> IO ()
-        loggerLog' l m = E.handle onError (m `deepseq` loggerLog l m) where
+        tryLog :: (Message -> IO ()) -> Message -> IO ()
+        tryLog logMsg m = E.handle onError (m `deepseq` logMsg m) where
             onError :: E.SomeException -> IO ()
             onError e = E.handle ignoreError $ do
                 tm <- getZonedTime
-                loggerLog l $ Message tm Error ["*"] $ fromString $ "Exception during logging message: " ++ show e
+                logMsg $ Message tm Error ["*"] $ fromString $ "Exception during logging message: " ++ show e
             ignoreError :: E.SomeException -> IO ()
             ignoreError _ = return ()
 
         -- | Initialize all loggers
-        startLog :: IO Logger -> IO ()
-        startLog l = E.bracket l loggerClose rootScope where
-            rootScope l' = mapM_ (loggerLog' l') msgs
+        startLog :: Logger -> IO ()
+        startLog (Consumer withCons) = withCons $ \logMsg -> do
+            mapM_ (tryLog logMsg) msgs
 
         -- | Write command with myThreadId
         writeCommand :: Command -> IO ()
