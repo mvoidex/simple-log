@@ -3,7 +3,7 @@
 module System.Log.Base (
     Level(..),
     Politics(..), Rule(..), Rules,
-    defaultPolitics, debugPolitics, tracePolitics, silentPolitics,
+    defaultPolitics, debugPolitics, tracePolitics, silentPolitics, supressPolitics,
     rule, absolute, relative, child, root, path,
     (%=),
     politics, use, low, high,
@@ -60,6 +60,10 @@ tracePolitics = Politics Trace Info
 -- | Silent politics
 silentPolitics :: Politics
 silentPolitics = Politics Info Fatal
+
+-- | Supress all messages politics
+supressPolitics :: Politics
+supressPolitics = Politics Fatal Fatal
 
 -- | Rule for politics
 data Rule = Rule {

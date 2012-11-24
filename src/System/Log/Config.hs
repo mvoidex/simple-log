@@ -97,7 +97,8 @@ predefineds = [
     ("default", defaultPolitics),
     ("debug", debugPolitics),
     ("trace", tracePolitics),
-    ("silent", silentPolitics)]
+    ("silent", silentPolitics),
+    ("supress", supressPolitics)]
 
 -- | Constant rules
 constant :: Rules -> IO (IO Rules)
