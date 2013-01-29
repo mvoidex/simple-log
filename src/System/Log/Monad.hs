@@ -19,6 +19,7 @@ module System.Log.Monad (
 import Prelude hiding (log)
 
 import Control.Exception (SomeException)
+import Control.Concurrent.MSem
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.Error
@@ -51,7 +52,8 @@ scope_ :: (MonadLog m) => Text -> m a -> m a
 scope_ s act = do
     (Log post getRules) <- askLog
     rs <- liftIO getRules
-    bracket_ (liftIO $ post $ EnterScope s rs) (liftIO $ post LeaveScope) act
+    sem <- liftIO $ new (0 :: Integer)
+    bracket_ (liftIO $ post $ EnterScope s rs) (liftIO (post (LeaveScope $ signal sem) >> wait sem)) act
 
 -- | Scope with log all exceptions
 scope :: (MonadLog m) => Text -> m a -> m a
@@ -66,8 +68,11 @@ scopeM_ :: (MonadLog m, MonadError e m) => Text -> m a -> m a
 scopeM_ s act = do
     (Log post getRules) <- askLog
     rs <- liftIO getRules
+    sem <- liftIO $ new (0 :: Integer)
     let
-        close = liftIO $ post LeaveScope
+        close = liftIO $ do
+            post $ LeaveScope $ signal sem
+            wait sem
     bracket_ (liftIO $ post $ EnterScope s rs) close (catchError act (\e -> close >> throwError e))
 
 -- | Scope with log exceptions from 'MonadError'

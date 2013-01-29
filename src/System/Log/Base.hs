@@ -26,6 +26,7 @@ import Prelude hiding (log)
 import Control.Arrow
 import qualified Control.Exception as E
 import Control.Concurrent
+import Control.Concurrent.MSem
 import Control.DeepSeq
 import Control.Monad
 import Data.List
@@ -240,7 +241,8 @@ writeLog (Log post _) l msg = do
 scopeLog_ :: Log -> Text -> IO a -> IO a
 scopeLog_ (Log post getRules) s act = do
     rs <- getRules
-    E.bracket_ (post $ EnterScope s rs) (post LeaveScope) act
+    sem <- new (0 :: Integer)
+    E.bracket_ (post $ EnterScope s rs) (post (LeaveScope $ signal sem) >> wait sem) act
 
 -- | New log-scope with lifting exceptions as errors
 scopeLog :: Log -> Text -> IO a -> IO a
@@ -269,7 +271,7 @@ foldEntry r s (Scope t rs es) = s t rs (map (foldEntry r s) es)
 -- | Command to logger
 data Command =
     EnterScope Text Rules |
-    LeaveScope |
+    LeaveScope (IO ()) |
     PostMessage Message
 
 -- | Apply commands to construct list of entries
@@ -278,7 +280,7 @@ entries = fst . entries' where
     entries' [] = ([], [])
     entries' (EnterScope s scopeRules : cs) = first (Scope s scopeRules rs :) $ entries' cs' where
         (rs, cs') = entries' cs
-    entries' (LeaveScope : cs) = ([], cs)
+    entries' ((LeaveScope _) : cs) = ([], cs)
     entries' (PostMessage m : cs) = first (Entry m :) $ entries' cs
 
 -- | Flattern entries to raw list of messages
