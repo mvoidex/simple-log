@@ -187,6 +187,11 @@ newLog rsInit ls = do
     r <- rs
 
     let
+        -- | Perform action on LeaveScope
+        act :: (ThreadId, Command) -> IO (ThreadId, Command)
+        act (thId, (LeaveScope onLeave)) = onLeave >> return (thId, (LeaveScope $ return ()))
+        act msg = return msg
+
         -- | Write commands from separate threads to separate channels
         process :: M.Map ThreadId (Chan Command) -> (ThreadId, Command) -> IO (M.Map ThreadId (Chan Command))
         process m (thId, cmd) = do
@@ -227,7 +232,9 @@ newLog rsInit ls = do
             i <- myThreadId
             writeChan ch (i, cmd)
 
-    void $ forkIO $ void $ foldM process M.empty cts
+    void $ forkIO $ void $ do
+        cts' <- mapM act cts
+        foldM process M.empty cts'
     mapM_ (forkIO . startLog) ls
     return $ Log writeCommand rs
 
