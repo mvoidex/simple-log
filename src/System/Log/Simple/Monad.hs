@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, FlexibleInstances, UndecidableInstances, MultiParamTypeClasses #-}
 
-module System.Log.Monad (
+module System.Log.Simple.Monad (
     withNoLog,
     withLog,
     log,
@@ -28,7 +28,7 @@ import Data.String
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
-import System.Log.Base
+import System.Log.Simple.Base
 
 class (MonadCatchIO m) => MonadLog m where
     askLog :: m Log

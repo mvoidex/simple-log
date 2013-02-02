@@ -1,10 +1,10 @@
-module System.Log.Console (
+module System.Log.Simple.Console (
     console
     ) where
 
 import Data.Text (Text)
 import qualified Data.Text.IO as T
-import System.Log.Base
+import System.Log.Simple.Base
 import System.IO
 
 console :: Consumer Text

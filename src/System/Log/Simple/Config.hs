@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module System.Log.Config (
+module System.Log.Simple.Config (
     parseRule, parseRules,
     parseRule_, parseRules_,
     constant, mvar, fileCfg
@@ -17,7 +17,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
-import System.Log.Base
+import System.Log.Simple.Base
 
 -- | Parse rule
 --

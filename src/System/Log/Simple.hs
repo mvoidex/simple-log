@@ -198,18 +198,18 @@
 -- 
 -- where 60 is period (in seconds) of auto reload or 0 for no reloading.
 --
-module System.Log (
-    module System.Log.Base,
-    module System.Log.Config,
-    module System.Log.Monad,
-    module System.Log.Text,
-    module System.Log.Console,
-    module System.Log.File
+module System.Log.Simple (
+    module System.Log.Simple.Base,
+    module System.Log.Simple.Config,
+    module System.Log.Simple.Monad,
+    module System.Log.Simple.Text,
+    module System.Log.Simple.Console,
+    module System.Log.Simple.File
     ) where
 
-import System.Log.Base hiding (entries, flatten, rules, writeLog, scopeLog_, scopeLog, scoperLog)
-import System.Log.Config
-import System.Log.Monad
-import System.Log.Text
-import System.Log.Console
-import System.Log.File
+import System.Log.Simple.Base hiding (entries, flatten, rules, writeLog, scopeLog_, scopeLog, scoperLog)
+import System.Log.Simple.Config
+import System.Log.Simple.Monad
+import System.Log.Simple.Text
+import System.Log.Simple.Console
+import System.Log.Simple.File

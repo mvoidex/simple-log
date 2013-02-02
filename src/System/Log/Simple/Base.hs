@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module System.Log.Base (
+module System.Log.Simple.Base (
     Level(..),
     Politics(..), Rule(..), Rules,
     defaultPolitics, debugPolitics, tracePolitics, silentPolitics, supressPolitics,
@@ -180,18 +180,13 @@ newLog :: RulesLoad -> [Logger] -> IO Log
 newLog _ [] = return noLog
 newLog rsInit ls = do
     ch <- newChan :: IO (Chan (ThreadId, Command))
-    chOut <- newChan :: IO (Chan Message)
+    chOut <- newChan :: IO (Chan Command)
     cts <- getChanContents ch
     msgs <- getChanContents chOut
     rs <- rsInit
     r <- rs
 
     let
-        -- | Perform action on LeaveScope
-        act :: (ThreadId, Command) -> IO (ThreadId, Command)
-        act (thId, (LeaveScope onLeave)) = onLeave >> return (thId, (LeaveScope $ return ()))
-        act msg = return msg
-
         -- | Write commands from separate threads to separate channels
         process :: M.Map ThreadId (Chan Command) -> (ThreadId, Command) -> IO (M.Map ThreadId (Chan Command))
         process m (thId, cmd) = do
@@ -207,19 +202,21 @@ newLog rsInit ls = do
             _ <- forkIO $ mapM_ (writeChan chOut) $ uncommand thCts
             return thChan
 
-        -- | Convert commands to messages
-        uncommand :: [Command] -> [Message]
+        -- | Filter commands
+        uncommand :: [Command] -> [Command]
         uncommand = flatten . rules r [] . entries
 
         -- | Perform log
-        tryLog :: (Message -> IO ()) -> Message -> IO ()
-        tryLog logMsg m = E.handle onError (m `deepseq` logMsg m) where
+        tryLog :: (Message -> IO ()) -> Command -> IO ()
+        tryLog _ (EnterScope _ _) = return ()
+        tryLog logMsg (PostMessage m) = E.handle onError (m `deepseq` logMsg m) where
             onError :: E.SomeException -> IO ()
             onError e = E.handle ignoreError $ do
                 tm <- getZonedTime
                 logMsg $ Message tm Error ["*"] $ fromString $ "Exception during logging message: " ++ show e
             ignoreError :: E.SomeException -> IO ()
             ignoreError _ = return ()
+        tryLog _ (LeaveScope io) = io
 
         -- | Initialize all loggers
         startLog :: Logger -> IO ()
@@ -232,9 +229,7 @@ newLog rsInit ls = do
             i <- myThreadId
             writeChan ch (i, cmd)
 
-    void $ forkIO $ void $ do
-        cts' <- mapM act cts
-        foldM process M.empty cts'
+    void $ forkIO $ void $ foldM process M.empty cts
     mapM_ (forkIO . startLog) ls
     return $ Log writeCommand rs
 
@@ -269,11 +264,11 @@ scoperLog l s act = do
 -- | Log entry, scope or message
 data Entry =
     Entry Message |
-    Scope Text Rules [Entry]
+    Scope Text Rules (IO ()) [Entry]
 
-foldEntry :: (Message -> a) -> (Text -> Rules -> [a] -> a) -> Entry -> a
+foldEntry :: (Message -> a) -> (Text -> Rules -> IO () -> [a] -> a) -> Entry -> a
 foldEntry r _ (Entry m) = r m
-foldEntry r s (Scope t rs es) = s t rs (map (foldEntry r s) es)
+foldEntry r s (Scope t rs io es) = s t rs io (map (foldEntry r s) es)
 
 -- | Command to logger
 data Command =
@@ -283,24 +278,31 @@ data Command =
 
 -- | Apply commands to construct list of entries
 entries :: [Command] -> [Entry]
-entries = fst . entries' where
-    entries' [] = ([], [])
-    entries' (EnterScope s scopeRules : cs) = first (Scope s scopeRules rs :) $ entries' cs' where
-        (rs, cs') = entries' cs
-    entries' ((LeaveScope _) : cs) = ([], cs)
-    entries' (PostMessage m : cs) = first (Entry m :) $ entries' cs
+entries = fst . fst . entries' where
+    entries' :: [Command] -> (([Entry], IO ()), [Command])
+    entries' [] = (([], return ()), [])
+    entries' (EnterScope s scopeRules : cs) = first (first (Scope s scopeRules io rs :)) $ entries' cs' where
+        ((rs, io), cs') = entries' cs
+    entries' (LeaveScope io : cs) = (([], io), cs)
+    entries' (PostMessage m : cs) = first (first (Entry m :)) $ entries' cs
 
--- | Flattern entries to raw list of messages
-flatten :: [Entry] -> [Message]
-flatten = concatMap $ foldEntry return (\s _ ms -> map (addScope s) (concat ms)) where
-    addScope s (Message tm l p str) = Message tm l (s : p) str
+-- | Flatten entries to raw list of commands
+flatten :: [Entry] -> [Command]
+flatten = concatMap $ foldEntry postMessage flatScope where
+    postMessage :: Message -> [Command]
+    postMessage m = [PostMessage m]
+    flatScope :: Text -> Rules -> IO () -> [[Command]] -> [Command]
+    flatScope s rs io cs = EnterScope s rs : (map (addScope s) (concat cs) ++ [LeaveScope io])
+    addScope :: Text -> Command -> Command
+    addScope s (PostMessage (Message tm l p str)) = PostMessage $ Message tm l (s : p) str
+    addScope _ m = m
 
 -- | Apply rules
 rules :: Rules -> [Text] -> [Entry] -> [Entry]
 rules rs rpath = map untraceScope . concatEntries . first (partition isNotTrace) . break isError where
     -- untrace inner scopes
     untraceScope (Entry msg) = Entry msg
-    untraceScope (Scope t scopeRules es) = Scope t scopeRules $ rules scopeRules (t : rpath) es
+    untraceScope (Scope t scopeRules io es) = Scope t scopeRules io $ rules scopeRules (t : rpath) es
 
     -- current politics
     ps = apply rs (reverse rpath) defaultPolitics
@@ -313,7 +315,7 @@ rules rs rpath = map untraceScope . concatEntries . first (partition isNotTrace)
     isNotTrace = onLevel True (>= politicsLow ps)
     
     onLevel :: a -> (Level -> a) -> Entry -> a
-    onLevel v _ (Scope _ _ _) = v
+    onLevel v _ (Scope _ _ _ _) = v
     onLevel _ f (Entry (Message _ l _ _)) = f l
 
 -- | Apply rules to path

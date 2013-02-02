@@ -1,10 +1,10 @@
-module System.Log.File (
+module System.Log.Simple.File (
     file
     ) where
 
 import Data.Text (Text)
 import qualified Data.Text.IO as T
-import System.Log.Base
+import System.Log.Simple.Base
 import System.FilePath
 import System.Directory
 import System.IO

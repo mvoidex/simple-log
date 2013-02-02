@@ -1,4 +1,4 @@
-module System.Log.Text (
+module System.Log.Simple.Text (
     defaultTimeFormat,
     textFmt, text
     ) where
@@ -7,7 +7,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
 import System.Locale
-import System.Log.Base
+import System.Log.Simple.Base
 
 -- | Default time format
 defaultTimeFormat :: String
