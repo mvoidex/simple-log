@@ -97,7 +97,7 @@ scoper s act = do
 scoperM :: (Error e, Show e, Show a, MonadLog m, MonadError e m) => Text -> m a -> m a
 scoperM s act = do
     r <- scopeM s act
-    log Trace $ T.concat ["Scope", s, " leaves with resul: ", fromString . show $ r]
+    log Trace $ T.concat ["Scope", s, " leaves with result: ", fromString . show $ r]
     return r
 
 -- | Ignore error
