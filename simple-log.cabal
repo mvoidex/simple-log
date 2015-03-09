@@ -1,5 +1,5 @@
 Name:                 simple-log
-Version:              0.3.0
+Version:              0.3.1
 Synopsis:             Simple log for Haskell
 Description:          Log library for Haskell with removing unnecessary traces
 License:              BSD3

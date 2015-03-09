@@ -29,6 +29,8 @@ import Control.Concurrent
 import Control.Concurrent.MSem
 import Control.DeepSeq
 import Control.Monad
+import Control.Monad.IO.Class
+import Control.Monad.CatchIO
 import Data.List
 import qualified Data.Map as M
 import Data.Text (Text)
@@ -234,28 +236,31 @@ newLog rsInit ls = do
     return $ Log writeCommand rs
 
 -- | Write message to log
-writeLog :: Log -> Level -> Text -> IO ()
-writeLog (Log post _) l msg = do
+writeLog :: MonadIO m => Log -> Level -> Text -> m ()
+writeLog (Log post _) l msg = liftIO $ do
     tm <- getZonedTime
     post $ PostMessage (Message tm l [] msg)
 
 -- | New log-scope
-scopeLog_ :: Log -> Text -> IO a -> IO a
+scopeLog_ :: MonadCatchIO m => Log -> Text -> m a -> m a
 scopeLog_ (Log post getRules) s act = do
-    rs <- getRules
-    sem <- new (0 :: Integer)
-    E.bracket_ (post $ EnterScope s rs) (post (LeaveScope $ signal sem) >> wait sem) act
+    rs <- liftIO getRules
+    sem <- liftIO $ new (0 :: Integer)
+    bracket_
+        (liftIO $ post $ EnterScope s rs)
+        (liftIO $ post (LeaveScope $ signal sem) >> wait sem)
+        act
 
 -- | New log-scope with lifting exceptions as errors
-scopeLog :: Log -> Text -> IO a -> IO a
-scopeLog l s act = scopeLog_ l s (E.catch act onError) where
-    onError :: E.SomeException -> IO a
+scopeLog :: MonadCatchIO m => Log -> Text -> m a -> m a
+scopeLog l s act = scopeLog_ l s (catch act onError) where
+    onError :: MonadIO m => E.SomeException -> m a
     onError e = do
         writeLog l Error $ fromString $ "Scope leaves with exception: " ++ show e
-        E.throwIO e
+        throw e
 
 -- | New log-scope with tracing scope result
-scoperLog :: Show a => Log -> Text -> IO a -> IO a
+scoperLog :: MonadCatchIO m => Show a => Log -> Text -> m a -> m a
 scoperLog l s act = do
     r <- scopeLog l s act
     writeLog l Trace $ T.concat ["Scope ", s, " leaves with result: ", fromString . show $ r]
