@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
 
 module System.Log.Simple.Config (
     parseRule, parseRules,
@@ -6,11 +6,10 @@ module System.Log.Simple.Config (
     constant, mvar, fileCfg
     ) where
 
-import Control.Applicative
 import Control.Arrow
 import Control.Concurrent
 import Control.Exception
-import Control.Monad.Error
+import Control.Monad.Except
 import Control.Monad.Writer
 import Data.Either
 import Data.Text (Text)

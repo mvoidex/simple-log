@@ -22,7 +22,7 @@ import Control.Exception (SomeException)
 import Control.Concurrent.MSem
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import Control.Monad.Error
+import Control.Monad.Except
 import Control.Monad.CatchIO as C
 import Data.String
 import Data.Text (Text)
@@ -77,7 +77,7 @@ scopeM_ s act = do
 
 -- | Scope with log exceptions from 'MonadError'
 -- | Workaround: we must explicitely post 'LeaveScope'
-scopeM :: (Error e, Show e, MonadLog m, MonadError e m) => Text -> m a -> m a
+scopeM :: (Show e, MonadLog m, MonadError e m) => Text -> m a -> m a
 scopeM s act = scopeM_ s $ C.catch act' onError' where
     onError' :: (MonadLog m) => SomeException -> m a
     onError' e = logE e >> throw e
@@ -94,7 +94,7 @@ scoper s act = do
     log Trace $ T.concat ["Scope ", s, " leaves with result: ", fromString . show $ r]
     return r
 
-scoperM :: (Error e, Show e, Show a, MonadLog m, MonadError e m) => Text -> m a -> m a
+scoperM :: (Show e, Show a, MonadLog m, MonadError e m) => Text -> m a -> m a
 scoperM s act = do
     r <- scopeM s act
     log Trace $ T.concat ["Scope", s, " leaves with result: ", fromString . show $ r]
@@ -107,9 +107,9 @@ ignoreError act = C.catch act onError where
     onError _ = return ()
 
 -- | Ignore MonadError error
-ignoreErrorM :: (Error e, MonadLog m, MonadError e m) => m () -> m ()
+ignoreErrorM :: (MonadLog m, MonadError e m) => m () -> m ()
 ignoreErrorM act = catchError act onError where
-    onError :: (Error e, MonadLog m, MonadError e m) => e -> m ()
+    onError :: (MonadLog m, MonadError e m) => e -> m ()
     onError _ = return ()
 
 -- | Trace value

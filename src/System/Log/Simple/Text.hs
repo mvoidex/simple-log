@@ -6,7 +6,6 @@ module System.Log.Simple.Text (
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
-import System.Locale
 import System.Log.Simple.Base
 
 -- | Default time format
