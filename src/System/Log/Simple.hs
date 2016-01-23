@@ -207,7 +207,7 @@ module System.Log.Simple (
     module System.Log.Simple.File
     ) where
 
-import System.Log.Simple.Base hiding (entries, flatten, rules, writeLog, scopeLog_, scopeLog, scoperLog)
+import System.Log.Simple.Base hiding (entries, flatten, rules)
 import System.Log.Simple.Config
 import System.Log.Simple.Monad
 import System.Log.Simple.Text

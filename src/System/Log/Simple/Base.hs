@@ -16,6 +16,7 @@ module System.Log.Simple.Base (
     Log(..), noLog,
     newLog,
     writeLog,
+    stopLog,
     scopeLog_,
     scopeLog,
     scoperLog
@@ -26,6 +27,7 @@ import Prelude hiding (log)
 import Control.Arrow
 import qualified Control.Exception as E
 import Control.Concurrent
+import qualified Control.Concurrent.Async as A
 import Control.Concurrent.MSem
 import Control.DeepSeq
 import Control.Monad
@@ -33,6 +35,7 @@ import Control.Monad.IO.Class
 import Control.Monad.CatchIO
 import Data.List
 import qualified Data.Map as M
+import Data.Maybe (catMaybes, isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
@@ -165,14 +168,27 @@ logger conv (Consumer withCons) = Consumer withCons' where
 -- | Log
 data Log = Log {
     logPost :: Command -> IO (),
+    logStop :: IO (),
     logRules :: IO Rules }
 
 -- | Empty log
 noLog :: Log
-noLog = Log (const (return ())) (return [])
+noLog = Log (const (return ())) (return ()) (return [])
 
 -- | Type to initialize rule updater
 type RulesLoad = IO (IO Rules)
+
+type ThreadMap = M.Map ThreadId (A.Async (), Chan (Maybe Command))
+type FChan a = Chan (Maybe a)
+
+writeFChan :: FChan a -> a -> IO ()
+writeFChan ch = writeChan ch . Just
+
+stopFChan :: FChan a -> IO ()
+stopFChan ch = writeChan ch Nothing
+
+getFChanContents :: FChan a -> IO [a]
+getFChanContents = liftM (catMaybes . takeWhile isJust) . getChanContents
 
 -- | Create log
 --
@@ -181,28 +197,37 @@ type RulesLoad = IO (IO Rules)
 newLog :: RulesLoad -> [Logger] -> IO Log
 newLog _ [] = return noLog
 newLog rsInit ls = do
-    ch <- newChan :: IO (Chan (ThreadId, Command))
-    chOut <- newChan :: IO (Chan Command)
-    cts <- getChanContents ch
-    msgs <- getChanContents chOut
+    ch <- newChan :: IO (FChan (ThreadId, Command))
+    chOut <- newChan :: IO (FChan Command)
+    cts <- getFChanContents ch
+    msgs <- getFChanContents chOut
     rs <- rsInit
     r <- rs
 
     let
         -- | Write commands from separate threads to separate channels
-        process :: M.Map ThreadId (Chan Command) -> (ThreadId, Command) -> IO (M.Map ThreadId (Chan Command))
+        process :: ThreadMap -> (ThreadId, Command) -> IO ThreadMap
         process m (thId, cmd) = do
-            thChan <- maybe newThreadChan return $ M.lookup thId m
-            writeChan thChan cmd
-            return $ M.insert thId thChan m
+            (thAsync, thChan) <- maybe newChild return $ M.lookup thId m
+            writeFChan thChan cmd
+            return $ M.insert thId (thAsync, thChan) m
+
+        -- | Stop all spawned asyncs for threads
+        stopChildren :: ThreadMap -> IO ()
+        stopChildren m = do
+            forM_ (M.elems m) $ \(thAsync, thChan) -> do
+                stopFChan thChan
+                A.wait thAsync
+            stopFChan chOut
 
         -- | New chan for thread, accepts commands from thread, writes processed messages to log-thread
-        newThreadChan :: IO (Chan Command)
-        newThreadChan = do
+        newChild :: IO (A.Async (), FChan Command)
+        newChild = do
             thChan <- newChan
-            thCts <- getChanContents thChan
-            _ <- forkIO $ mapM_ (writeChan chOut) $ uncommand thCts
-            return thChan
+            thCts <- getFChanContents thChan
+            thAsync <- A.async $ mapM_ (writeFChan chOut) $
+                uncommand thCts
+            return (thAsync, thChan)
 
         -- | Filter commands
         uncommand :: [Command] -> [Command]
@@ -229,21 +254,27 @@ newLog rsInit ls = do
         writeCommand :: Command -> IO ()
         writeCommand cmd = do
             i <- myThreadId
-            writeChan ch (i, cmd)
+            writeFChan ch (i, cmd)
 
-    void $ forkIO $ void $ foldM process M.empty cts
+    p <- A.async $ void $ do
+        m <- foldM process M.empty cts
+        stopChildren m
     mapM_ (forkIO . startLog) ls
-    return $ Log writeCommand rs
+    return $ Log writeCommand (stopFChan ch >> A.wait p) rs
 
 -- | Write message to log
 writeLog :: MonadIO m => Log -> Level -> Text -> m ()
-writeLog (Log post _) l msg = liftIO $ do
+writeLog (Log post _ _) l msg = liftIO $ do
     tm <- getZonedTime
     post $ PostMessage (Message tm l [] msg)
 
+-- | Wait log messages and stop log
+stopLog :: MonadIO m => Log -> m ()
+stopLog (Log _ stop _) = liftIO stop
+
 -- | New log-scope
 scopeLog_ :: MonadCatchIO m => Log -> Text -> m a -> m a
-scopeLog_ (Log post getRules) s act = do
+scopeLog_ (Log post _ getRules) s act = do
     rs <- liftIO getRules
     sem <- liftIO $ new (0 :: Integer)
     bracket_

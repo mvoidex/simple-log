@@ -44,13 +44,13 @@ withLog l act = runReaderT act l
 
 log :: (MonadLog m) => Level -> Text -> m ()
 log l msg = do
-    (Log post _) <- askLog
+    (Log post _ _) <- askLog
     tm <- liftIO getZonedTime
     liftIO $ post $ PostMessage (Message tm l [] msg)
 
 scope_ :: (MonadLog m) => Text -> m a -> m a
 scope_ s act = do
-    (Log post getRules) <- askLog
+    (Log post _ getRules) <- askLog
     rs <- liftIO getRules
     sem <- liftIO $ new (0 :: Integer)
     bracket_ (liftIO $ post $ EnterScope s rs) (liftIO (post (LeaveScope $ signal sem) >> wait sem)) act
@@ -66,7 +66,7 @@ scope s act = scope_ s $ C.catch act onError where
 -- | Workaround: we must explicitely post 'LeaveScope'
 scopeM_ :: (MonadLog m, MonadError e m) => Text -> m a -> m a
 scopeM_ s act = do
-    (Log post getRules) <- askLog
+    (Log post _ getRules) <- askLog
     rs <- liftIO getRules
     sem <- liftIO $ new (0 :: Integer)
     let
