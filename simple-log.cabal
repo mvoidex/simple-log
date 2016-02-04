@@ -1,5 +1,5 @@
 Name:                 simple-log
-Version:              0.3.3
+Version:              0.3.4
 Synopsis:             Simple log for Haskell
 Description:          Log library for Haskell with removing unnecessary traces
 License:              BSD3
@@ -26,7 +26,7 @@ Library
     SafeSemaphore >= 0.9.0 && < 1.0.0,
     text >= 0.11.0 && < 2.0.0,
     time >= 1.5 && < 1.6,
-    transformers >= 0.4 && < 0.5
+    transformers >= 0.4 && < 0.6
   Exposed-Modules:
     System.Log.Simple
     System.Log.Simple.Base
