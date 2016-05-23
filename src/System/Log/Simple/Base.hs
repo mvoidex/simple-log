@@ -31,8 +31,8 @@ import qualified Control.Concurrent.Async as A
 import Control.Concurrent.MSem
 import Control.DeepSeq
 import Control.Monad
+import Control.Monad.Catch
 import Control.Monad.IO.Class
-import Control.Monad.CatchIO
 import Data.List
 import qualified Data.Map as M
 import Data.Maybe (catMaybes, isJust)
@@ -273,7 +273,7 @@ stopLog :: MonadIO m => Log -> m ()
 stopLog (Log _ stop _) = liftIO stop
 
 -- | New log-scope
-scopeLog_ :: MonadCatchIO m => Log -> Text -> m a -> m a
+scopeLog_ :: (MonadIO m, MonadMask m) => Log -> Text -> m a -> m a
 scopeLog_ (Log post _ getRules) s act = do
     rs <- liftIO getRules
     sem <- liftIO $ new (0 :: Integer)
@@ -283,15 +283,15 @@ scopeLog_ (Log post _ getRules) s act = do
         act
 
 -- | New log-scope with lifting exceptions as errors
-scopeLog :: MonadCatchIO m => Log -> Text -> m a -> m a
+scopeLog :: (MonadIO m, MonadMask m) => Log -> Text -> m a -> m a
 scopeLog l s act = scopeLog_ l s (catch act onError) where
-    onError :: MonadIO m => E.SomeException -> m a
+    onError :: (MonadIO m, MonadThrow m) => E.SomeException -> m a
     onError e = do
         writeLog l Error $ fromString $ "Scope leaves with exception: " ++ show e
-        throw e
+        throwM e
 
 -- | New log-scope with tracing scope result
-scoperLog :: MonadCatchIO m => Show a => Log -> Text -> m a -> m a
+scoperLog :: (MonadIO m, MonadMask m) => Show a => Log -> Text -> m a -> m a
 scoperLog l s act = do
     r <- scopeLog l s act
     writeLog l Trace $ T.concat ["Scope ", s, " leaves with result: ", fromString . show $ r]
