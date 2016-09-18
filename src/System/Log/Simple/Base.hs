@@ -173,7 +173,10 @@ data Log = Log {
 
 -- | Empty log
 noLog :: Log
-noLog = Log (const (return ())) (return ()) (return [])
+noLog = Log post' (return ()) (return []) where
+    post' (EnterScope _ _) = return ()
+    post' (LeaveScope io) = io
+    post' (PostMessage _) = return ()
 
 -- | Type to initialize rule updater
 type RulesLoad = IO (IO Rules)

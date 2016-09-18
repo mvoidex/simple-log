@@ -1,6 +1,7 @@
-{-# LANGUAGE OverloadedStrings, FlexibleInstances, UndecidableInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings, FlexibleInstances, UndecidableInstances, MultiParamTypeClasses, GeneralizedNewtypeDeriving #-}
 
 module System.Log.Simple.Monad (
+    LogT(..),
     withNoLog,
     withLog,
     log,
@@ -22,6 +23,8 @@ import Control.Exception (SomeException)
 import Control.Concurrent.MSem
 import Control.Monad.IO.Class
 import Control.Monad.Reader
+import Control.Monad.State
+import Control.Monad.Writer
 import Control.Monad.Except
 import Control.Monad.Catch
 import Data.String
@@ -33,14 +36,26 @@ import System.Log.Simple.Base
 class (MonadIO m, MonadMask m) => MonadLog m where
     askLog :: m Log
 
-instance (MonadIO m, MonadMask m) => MonadLog (ReaderT Log m) where
-    askLog = ask
+instance MonadLog m => MonadLog (ReaderT r m) where
+    askLog = lift askLog
 
-withNoLog :: ReaderT Log m a -> m a
-withNoLog act = runReaderT act noLog
+instance MonadLog m => MonadLog (StateT s m) where
+    askLog = lift askLog
 
-withLog :: Log -> ReaderT Log m a -> m a
-withLog l act = runReaderT act l
+instance (Monoid w, MonadLog m) => MonadLog (WriterT w m) where
+    askLog = lift askLog
+
+newtype LogT m a = LogT { runLogT :: ReaderT Log m a }
+    deriving (Functor, Applicative, Monad, MonadIO, MonadReader Log, MonadThrow, MonadCatch, MonadMask)
+
+instance (MonadIO m, MonadMask m) => MonadLog (LogT m) where
+    askLog = LogT ask
+
+withNoLog :: LogT m a -> m a
+withNoLog act = runReaderT (runLogT act) noLog
+
+withLog :: Log -> LogT m a -> m a
+withLog l act = runReaderT (runLogT act) l
 
 log :: (MonadLog m) => Level -> Text -> m ()
 log l msg = do
