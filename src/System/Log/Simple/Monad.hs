@@ -2,9 +2,9 @@
 
 module System.Log.Simple.Monad (
     LogT(..),
-    withNoLog,
-    withLog,
-    log,
+    withNoLog, withLog,
+    runLog, runNoLog,
+    log, sendLog,
     scope_,
     scope,
     scopeM_,
@@ -24,7 +24,9 @@ import Control.Concurrent.MSem
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.State
+import qualified Control.Monad.State.Strict as Strict
 import Control.Monad.Writer
+import qualified Control.Monad.Writer.Strict as Strict
 import Control.Monad.Except
 import Control.Monad.Catch
 import Data.String
@@ -42,11 +44,20 @@ instance MonadLog m => MonadLog (ReaderT r m) where
 instance MonadLog m => MonadLog (StateT s m) where
     askLog = lift askLog
 
+instance MonadLog m => MonadLog (Strict.StateT s m) where
+    askLog = lift askLog
+
 instance (Monoid w, MonadLog m) => MonadLog (WriterT w m) where
+    askLog = lift askLog
+
+instance (Monoid w, MonadLog m) => MonadLog (Strict.WriterT w m) where
     askLog = lift askLog
 
 newtype LogT m a = LogT { runLogT :: ReaderT Log m a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader Log, MonadThrow, MonadCatch, MonadMask)
+
+instance MonadTrans LogT where
+    lift = LogT . lift
 
 instance (MonadIO m, MonadMask m) => MonadLog (LogT m) where
     askLog = LogT ask
@@ -57,11 +68,22 @@ withNoLog act = runReaderT (runLogT act) noLog
 withLog :: Log -> LogT m a -> m a
 withLog l act = runReaderT (runLogT act) l
 
+runLog :: MonadIO m => RulesLoad -> [Logger] -> LogT m a -> m a
+runLog rs ls act = do
+    l <- liftIO $ newLog rs ls
+    withLog l act
+
+runNoLog :: LogT m a -> m a
+runNoLog = withNoLog
+
 log :: (MonadLog m) => Level -> Text -> m ()
 log l msg = do
     (Log post _ _) <- askLog
     tm <- liftIO getZonedTime
     liftIO $ post $ PostMessage (Message tm l [] msg)
+
+sendLog :: MonadLog m => Level -> Text -> m ()
+sendLog = log
 
 scope_ :: (MonadLog m) => Text -> m a -> m a
 scope_ s act = do

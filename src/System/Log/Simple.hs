@@ -204,8 +204,15 @@ module System.Log.Simple (
     module System.Log.Simple.Monad,
     module System.Log.Simple.Text,
     module System.Log.Simple.Console,
-    module System.Log.Simple.File
+    module System.Log.Simple.File,
+
+    runConsoleLog, runLogMsgs, runLogTexts
     ) where
+
+import Control.Monad.IO.Class
+import Control.Concurrent
+import Data.Maybe
+import Data.Text (Text)
 
 import System.Log.Simple.Base hiding (entries, flatten, rules)
 import System.Log.Simple.Config
@@ -213,3 +220,23 @@ import System.Log.Simple.Monad
 import System.Log.Simple.Text
 import System.Log.Simple.Console
 import System.Log.Simple.File
+import System.Log.Simple.Chan
+
+runConsoleLog :: RulesLoad -> LogT IO a -> IO a
+runConsoleLog rs = runLog rs [logger text console]
+
+runLogChan :: MonadIO m => (Chan w -> Logger) -> RulesLoad -> LogT m a -> m (a, [w])
+runLogChan c rs act = do
+    ch <- liftIO newChan
+    mch <- liftIO newChan
+    _ <- liftIO $ forkIO $ getChanContents ch >>= mapM_ (writeChan mch . Just)
+    r <- runLog rs [c ch] act
+    liftIO $ writeChan mch Nothing
+    msgs <- liftIO ((catMaybes . takeWhile isJust) <$> getChanContents mch)
+    return (r, msgs)
+
+runLogMsgs :: MonadIO m => RulesLoad -> LogT m a -> m (a, [Message])
+runLogMsgs = runLogChan chan
+
+runLogTexts :: MonadIO m => RulesLoad -> LogT m a -> m (a, [Text])
+runLogTexts = runLogChan (logger text . chan)

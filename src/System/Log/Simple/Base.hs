@@ -33,6 +33,7 @@ import Control.DeepSeq
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.IO.Class
+import Data.Default
 import Data.List
 import qualified Data.Map as M
 import Data.Maybe (catMaybes, isJust)
@@ -50,6 +51,9 @@ data Politics = Politics {
     politicsLow :: Level,
     politicsHigh :: Level }
         deriving (Eq, Ord, Read, Show)
+
+instance Default Politics where
+    def = defaultPolitics
 
 -- | Default politics
 defaultPolitics :: Politics
@@ -236,14 +240,18 @@ newLog rsInit ls = do
         uncommand :: [Command] -> [Command]
         uncommand = flatten . rules r [] . entries
 
+        fatalMsg :: String -> IO Message
+        fatalMsg s = do
+            tm <- getZonedTime
+            return $ Message tm Fatal ["*"] $ fromString s
+
+
         -- | Perform log
         tryLog :: (Message -> IO ()) -> Command -> IO ()
         tryLog _ (EnterScope _ _) = return ()
         tryLog logMsg (PostMessage m) = E.handle onError (m `deepseq` logMsg m) where
             onError :: E.SomeException -> IO ()
-            onError e = E.handle ignoreError $ do
-                tm <- getZonedTime
-                logMsg $ Message tm Error ["*"] $ fromString $ "Exception during logging message: " ++ show e
+            onError e = E.handle ignoreError $ fatalMsg ("Exception during logging message: " ++ show e) >>= logMsg
             ignoreError :: E.SomeException -> IO ()
             ignoreError _ = return ()
         tryLog _ (LeaveScope io) = io

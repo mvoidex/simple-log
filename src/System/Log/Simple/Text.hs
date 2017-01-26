@@ -1,22 +1,26 @@
 module System.Log.Simple.Text (
     defaultTimeFormat,
-    textFmt, text
+    textFmt, text, shortText, msgOnly
     ) where
 
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
+import Text.Format
+
 import System.Log.Simple.Base
 
 -- | Default time format
 defaultTimeFormat :: String
 defaultTimeFormat = "%d/%m/%y %T %z"
 
--- | Text log converter with time format
-textFmt :: String -> Converter Text
-textFmt fmt (Message tm l p msg) = T.intercalate (T.pack "\t") [T.pack s, T.pack (toStr l), msg'] where
-    s = formatTime defaultTimeLocale fmt tm
-    msg' = T.concat [T.intercalate (T.pack "/") p, T.pack "> ", msg]
+textFmt :: String -> String -> Converter Text
+textFmt tmFmt msgFmt (Message tm l p msg) = format msgFmt ~~ args where
+    args = [
+        "time" ~% formatTime defaultTimeLocale tmFmt tm,
+        "level" ~% toStr l,
+        "scope" ~% T.intercalate (T.pack "/") p,
+        "message" ~% msg]
     toStr Trace = "TRACE"
     toStr Debug = "DEBUG"
     toStr Info = "INFO"
@@ -26,4 +30,10 @@ textFmt fmt (Message tm l p msg) = T.intercalate (T.pack "\t") [T.pack s, T.pack
 
 -- | Text log converter with default time format
 text :: Converter Text
-text = textFmt defaultTimeFormat
+text = textFmt defaultTimeFormat "{time}\t{level}\t{scope}> {message}"
+
+shortText :: Converter Text
+shortText = textFmt defaultTimeFormat "{level}: {message}"
+
+msgOnly :: Converter Text
+msgOnly = textFmt defaultTimeFormat "{message}"

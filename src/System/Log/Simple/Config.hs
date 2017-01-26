@@ -3,7 +3,8 @@
 module System.Log.Simple.Config (
     parseRule, parseRules,
     parseRule_, parseRules_,
-    constant, mvar, fileCfg
+    rule_, rules_,
+    rulesCfg, mvarCfg, fileCfg
     ) where
 
 import Control.Arrow
@@ -61,13 +62,13 @@ parseRule txt = do
             ["high", v] -> high <$> value v
             ["set", l, h] -> politics <$> value l <*> value h
             ["use", v] -> use <$> predefined v
-            _ -> throwError $ concat ["Unable to parse: ", T.unpack u]
+            _ -> throwError $ "Unable to parse: " ++ T.unpack u
 
         value v = maybe noValue return $ lookup v values where
-            noValue = throwError $ concat ["Invalid value: ", T.unpack v]
+            noValue = throwError $ "Invalid value: " ++ T.unpack v
 
         predefined v = maybe noPredefined return $ lookup v predefineds where
-            noPredefined = throwError $ concat ["Invalid predefined: ", T.unpack v]
+            noPredefined = throwError $ "Invalid predefined: " ++ T.unpack v
 
 parseRules :: Text -> Writer [Text] Rules
 parseRules = mapM parseRule . filter (not . T.null . T.strip) . T.lines
@@ -79,6 +80,12 @@ parseRule_ = fst . runWriter . parseRule
 -- | Try parse rules ignoring errors
 parseRules_ :: Text -> Rules
 parseRules_ = fst . runWriter . parseRules
+
+rule_ :: Text -> Rule
+rule_ = parseRule_
+
+rules_ :: [Text] -> Rules
+rules_ = map rule_
 
 -- | Value names
 values :: [(Text, Level)]
@@ -100,12 +107,12 @@ predefineds = [
     ("supress", supressPolitics)]
 
 -- | Constant rules
-constant :: Rules -> IO (IO Rules)
-constant = return . return
+rulesCfg :: Rules -> IO (IO Rules)
+rulesCfg = return . return
 
 -- | Rules from mvar
-mvar :: MVar Rules -> IO (IO Rules)
-mvar = return . readMVar
+mvarCfg :: MVar Rules -> IO (IO Rules)
+mvarCfg = return . readMVar
 
 -- | Rules from file
 fileCfg :: FilePath -> Int -> IO (IO Rules)
@@ -116,7 +123,7 @@ fileCfg f seconds = do
         threadDelay (seconds * 1000000)
         rs' <- readRules
         void $ swapMVar var rs'
-    mvar var
+    mvarCfg var
     where
         readRules = do
             cts <- T.readFile f
