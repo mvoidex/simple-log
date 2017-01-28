@@ -12,7 +12,7 @@ import System.Log.Simple.Base
 
 -- | Default time format
 defaultTimeFormat :: String
-defaultTimeFormat = "%d/%m/%y %T %z"
+defaultTimeFormat = "%_Y-%m-%d %T %z"
 
 textFmt :: String -> String -> Converter Text
 textFmt tmFmt msgFmt (Message tm l p msg) = format msgFmt ~~ args where
