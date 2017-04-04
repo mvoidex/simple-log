@@ -362,7 +362,7 @@ rules rs rpath = map untraceScope . concatEntries . first (partition isNotTrace)
 
     isError = onLevel False (> politicsHigh ps)
     isNotTrace = onLevel True (>= politicsLow ps)
-    
+
     onLevel :: a -> (Level -> a) -> Entry -> a
     onLevel v _ (Scope _ _ _ _) = v
     onLevel _ f (Entry (Message _ l _ _)) = f l

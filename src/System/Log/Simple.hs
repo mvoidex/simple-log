@@ -206,13 +206,15 @@ module System.Log.Simple (
     module System.Log.Simple.Console,
     module System.Log.Simple.File,
 
-    runConsoleLog, runLogMsgs, runLogTexts
+    globalLogger,
+    runGlobalLog, runConsoleLog, runLogMsgs, runLogTexts
     ) where
 
 import Control.Monad.IO.Class
 import Control.Concurrent
 import Data.Maybe
 import Data.Text (Text)
+import System.IO.Unsafe (unsafePerformIO)
 
 import System.Log.Simple.Base hiding (entries, flatten, rules)
 import System.Log.Simple.Config
@@ -221,6 +223,14 @@ import System.Log.Simple.Text
 import System.Log.Simple.Console
 import System.Log.Simple.File
 import System.Log.Simple.Chan
+
+globalLogger :: Log
+globalLogger = unsafePerformIO $ do
+    cfg <- newMVar $ rules_ []
+    newLog (mvarCfg cfg) [logger text console]
+
+runGlobalLog :: LogT IO a -> IO a
+runGlobalLog = withLog globalLogger
 
 runConsoleLog :: RulesLoad -> LogT IO a -> IO a
 runConsoleLog rs = runLog rs [logger text console]
