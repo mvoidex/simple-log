@@ -41,6 +41,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
 import Data.String
+import GHC.Stack
 
 -- | Level of message
 data Level = Trace | Debug | Info | Warning | Error | Fatal
@@ -245,7 +246,6 @@ newLog rsInit ls = do
             tm <- getZonedTime
             return $ Message tm Fatal ["*"] $ fromString s
 
-
         -- | Perform log
         tryLog :: (Message -> IO ()) -> Command -> IO ()
         tryLog _ (EnterScope _ _) = return ()
@@ -296,9 +296,11 @@ scopeLog_ (Log post _ getRules) s act = do
 -- | New log-scope with lifting exceptions as errors
 scopeLog :: (MonadIO m, MonadMask m) => Log -> Text -> m a -> m a
 scopeLog l s act = scopeLog_ l s (catch act onError) where
-    onError :: (MonadIO m, MonadThrow m) => E.SomeException -> m a
+    onError :: (MonadIO m, MonadThrow m, HasCallStack) => E.SomeException -> m a
     onError e = do
-        writeLog l Error $ fromString $ "Scope leaves with exception: " ++ show e
+        writeLog l Error $ fromString $ unlines [
+            "Scope leaves with exception: " ++ show e,
+            prettyCallStack callStack]
         throwM e
 
 -- | New log-scope with tracing scope result

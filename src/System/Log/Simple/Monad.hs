@@ -33,6 +33,7 @@ import Data.String
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
+import GHC.Stack
 import System.Log.Simple.Base
 
 class (MonadIO m, MonadMask m) => MonadLog m where
@@ -95,9 +96,11 @@ scope_ s act = do
 -- | Scope with log all exceptions
 scope :: (MonadLog m) => Text -> m a -> m a
 scope s act = scope_ s $ catch act onError where
-    onError :: (MonadLog m) => SomeException -> m a
+    onError :: (MonadLog m, HasCallStack) => SomeException -> m a
     onError e = do
-        log Error $ T.concat ["Scope leaves with exception: ", fromString . show $ e]
+        log Error $ T.unlines [
+            T.concat ["Scope leaves with exception: ", fromString . show $ e],
+            fromString $ prettyCallStack callStack]
         throwM e
 
 -- | Workaround: we must explicitely post 'LeaveScope'
@@ -116,13 +119,15 @@ scopeM_ s act = do
 -- | Workaround: we must explicitely post 'LeaveScope'
 scopeM :: (Show e, MonadLog m, MonadError e m) => Text -> m a -> m a
 scopeM s act = scopeM_ s $ catch act' onError' where
-    onError' :: (MonadLog m) => SomeException -> m a
+    onError' :: (MonadLog m, HasCallStack) => SomeException -> m a
     onError' e = logE e >> throwM e
     act' = catchError act onError
-    onError :: (MonadLog m, Show e, MonadError e m) => e -> m a
+    onError :: (MonadLog m, Show e, MonadError e m, HasCallStack) => e -> m a
     onError e = logE e >> throwError e
-    logE :: (MonadLog m, Show e) => e -> m ()
-    logE e = log Error $ T.concat ["Scope leaves with exception: ", fromString . show $ e]
+    logE :: (MonadLog m, Show e, HasCallStack) => e -> m ()
+    logE e = log Error $ T.unlines [
+        T.concat ["Scope leaves with exception: ", fromString . show $ e],
+        fromString $ prettyCallStack callStack]
 
 -- | Scope with tracing result
 scoper :: (Show a, MonadLog m) => Text -> m a -> m a
