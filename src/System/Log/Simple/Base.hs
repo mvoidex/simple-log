@@ -47,7 +47,9 @@ import GHC.Stack
 data Level = Trace | Debug | Info | Warning | Error | Fatal
     deriving (Eq, Ord, Read, Show, Enum, Bounded)
 
--- | Scope politics
+-- | Scope politics, politics defines two levels:
+-- low - messages with < level won't be written in normal-mode
+-- high - messages with > level turns on detailed-mode for current scope (in this case all messages are written)
 data Politics = Politics {
     politicsLow :: Level,
     politicsHigh :: Level }
@@ -56,19 +58,19 @@ data Politics = Politics {
 instance Default Politics where
     def = defaultPolitics
 
--- | Default politics
+-- | Default politics: log all ≥ @Info@, turn detailed log on if > @Warning@
 defaultPolitics :: Politics
 defaultPolitics = Politics Info Warning
 
--- | Debug politics
+-- | Debug politics: log all ≥ @Debug@, turn detailed log for > @Info@
 debugPolitics :: Politics
 debugPolitics = Politics Debug Info
 
--- | Trace politics
+-- | Trace politics: log everything
 tracePolitics :: Politics
 tracePolitics = Politics Trace Info
 
--- | Silent politics
+-- | Silent politics: log only ≥ @Info@, no detailed-mode 
 silentPolitics :: Politics
 silentPolitics = Politics Info Fatal
 
