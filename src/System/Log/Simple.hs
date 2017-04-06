@@ -30,44 +30,44 @@
 -- Now we can run our log with auto reloading config every 60 seconds:
 --
 -- @
---run :: IO ()
+--run ∷ IO ()
 --run = do
---    l <- newLog (fileCfg \"log.cfg\" 60) [logger text (file \"out.log\")]
---    withLog l yourFunction
+--	l <- newLog (fileCfg \"log.cfg\" 60) [logger text (file \"out.log\")]
+--	withLog l yourFunction
 -- @
 --
 -- And use it:
 --
 -- @
---yourFunction :: (MonadLog m) => m ()
+--yourFunction ∷ (MonadLog m) => m ()
 --yourFunction = scope \"your\" $ do
---    log Trace \"Hello from your function\"
+--	log Trace \"Hello from your function\"
 -- @
 --
 -- The main ideas of this log library are:
 --
---     * we don't want to see all unnecessary trace messages when there are no errors,
+--	 * we don't want to see all unnecessary trace messages when there are no errors,
 --
---     * but we want to have all possible information about error.
+--	 * but we want to have all possible information about error.
 -- 
 -- This library is based on scopes. Every scope have a name, and logs traces only if there are some errors. Otherwise it logs only message with 'Info' level.
 -- 
 -- Let's start by simple example:
 --
 -- @
---test :: ReaderT Log IO ()
+--test ∷ ReaderT Log IO ()
 --test = scope \"test\" $ do
 --log Trace \"Trace message\"
---    log Info \"Starting test\"
---    s \<- liftIO T.getLine
---    when (T.null s) $ log Error \"Oh no!\"
---    log Trace $ T.concat [\"Your input: \", s]
+--	log Info \"Starting test\"
+--	s \<- liftIO T.getLine
+--	when (T.null s) $ log Error \"Oh no!\"
+--	log Trace $ T.concat [\"Your input: \", s]
 -- @
 --
 -- When you input some valid string, it will produce output:
 --
 -- @
---08\/10\/12 22:23:34   INFO    test> Starting test
+--08\/10\/12 22:23:34   INFO	test> Starting test
 --abc
 -- @
 --
@@ -76,7 +76,7 @@
 -- But if you input empty strings, you'll get:
 --
 -- @
---08\/10\/12 22:24:20   INFO    test> Starting test
+--08\/10\/12 22:24:20   INFO	test> Starting test
 --08\/10\/12 22:24:20   TRACE   test> Trace message
 --08\/10\/12 22:24:21   ERROR   test> Oh no!
 --08\/10\/12 22:24:21   TRACE   test> Your input: 
@@ -89,27 +89,27 @@
 -- Of course, scopes can be nested:
 --
 -- @
---test :: ReaderT Log IO ()
+--test ∷ ReaderT Log IO ()
 --test = scope \"test\" $ do
---    log Trace \"test trace\"
---    foo
---    log Info \"some info\"
---    bar
+--	log Trace \"test trace\"
+--	foo
+--	log Info \"some info\"
+--	bar
 --
---foo :: ReaderT Log IO ()
+--foo ∷ ReaderT Log IO ()
 --foo = scope \"foo\" $ do
---    log Trace \"foo trace\"
+--	log Trace \"foo trace\"
 --
---bar :: ReaderT Log IO ()
+--bar ∷ ReaderT Log IO ()
 --bar = scope \"bar\" $ do
---    log Trace \"bar trace\"
---    log Error \"bar error\"
+--	log Trace \"bar trace\"
+--	log Error \"bar error\"
 -- @
 --
 -- Output:
 --
 -- @
---08\/10\/12 22:32:53   INFO    test> some info
+--08\/10\/12 22:32:53   INFO	test> some info
 --08\/10\/12 22:32:53   TRACE   test/bar> bar trace
 --08\/10\/12 22:32:53   ERROR   test/bar> bar error
 -- @
@@ -119,13 +119,13 @@
 -- Code to run log:
 --
 -- @
---rules :: Rules
+--rules ∷ Rules
 --rules = []
 --
---run :: IO ()
+--run ∷ IO ()
 --run = do
---    l <- newLog (constant rules) [logger text console]
---    withLog l test
+--	l <- newLog (constant rules) [logger text console]
+--	withLog l test
 -- @
 --
 -- Politics sets 'low' and 'high' levels. By default, 'low' and 'high' are INFO and WARN. Levels below 'low' are "traces" ('Trace' and 'Debug' by default). Levels above 'high' are "errors" ('Error' and 'Fatal' by default).
@@ -138,8 +138,8 @@
 --
 -- @
 --rules = [
---    rule root $ use defaultPolitics,
---    rule (relative [\"foo\"]) $ low Trace]
+--	rule root $ use defaultPolitics,
+--	rule (relative [\"foo\"]) $ low Trace]
 -- @
 --
 -- From now all scope-paths, that contains \"foo\" (all scopes with name \"foo\") will have politics with 'low' set to Trace.
@@ -148,16 +148,16 @@
 --
 -- @
 --rules = [
---    rule root $ use defaultPolitics,
---    relative [\"quux\", \"foo\"] $ low Trace]
+--	rule root $ use defaultPolitics,
+--	relative [\"quux\", \"foo\"] $ low Trace]
 -- @
 --
 -- And, of course, we may specify absolute path:
 --
 -- @
 --rules = [
---    rule root $ use defaultPolitics,
---    absolute [\"bar\", \"baz\", \"foo\"] $ low Trace]
+--	rule root $ use defaultPolitics,
+--	absolute [\"bar\", \"baz\", \"foo\"] $ low Trace]
 -- @
 -- 
 -- Politics will be changed only for scope \"foo\", which is nested directly in \"baz\", which is nested in \"bar\", which is top scope.
@@ -166,18 +166,18 @@
 --
 -- @
 --rules = [
---    \"\/\" %= use defaultPolitics,
---    \"\/bar\/baz\/foo\" %= low Trace,
---    \"quux\/foo\" %= low Debug]
+--	\"\/\" %= use defaultPolitics,
+--	\"\/bar\/baz\/foo\" %= low Trace,
+--	\"quux\/foo\" %= low Debug]
 -- @
 --
 -- One more way to use special syntax for rules:
 --
 -- @
 --rules = parseRules_ $ T.unlines [
---    \"\/: use default\",
---    \"\/bar\/baz\/foo: low trace\",
---    \"quux\/foo: low debug\"]
+--	\"\/: use default\",
+--	\"\/bar\/baz\/foo: low trace\",
+--	\"quux\/foo: low debug\"]
 -- @
 --
 -- Here \"\/\" is for root, \"\/path\" for absolute path, \"path\" for relative and \"path\/\" for child of \"path\" (which may be also prefixed with \"\/\" to be absolute)
@@ -193,22 +193,22 @@
 -- We can use it to config log
 --
 -- @
---    l <- newLog (fileCfg \"log.cfg\" 60) [logger text console]
+--	l <- newLog (fileCfg \"log.cfg\" 60) [logger text console]
 -- @
 -- 
 -- where 60 is period (in seconds) of auto reload or 0 for no reloading.
 --
 module System.Log.Simple (
-    module System.Log.Simple.Base,
-    module System.Log.Simple.Config,
-    module System.Log.Simple.Monad,
-    module System.Log.Simple.Text,
-    module System.Log.Simple.Console,
-    module System.Log.Simple.File,
+	module System.Log.Simple.Base,
+	module System.Log.Simple.Config,
+	module System.Log.Simple.Monad,
+	module System.Log.Simple.Text,
+	module System.Log.Simple.Console,
+	module System.Log.Simple.File,
 
-    globalLogger,
-    runGlobalLog, runConsoleLog, runLogMsgs, runLogTexts
-    ) where
+	globalLogger,
+	runGlobalLog, runConsoleLog, runLogMsgs, runLogTexts
+	) where
 
 import Control.Monad.IO.Class
 import Control.Concurrent
@@ -224,29 +224,29 @@ import System.Log.Simple.Console
 import System.Log.Simple.File
 import System.Log.Simple.Chan
 
-globalLogger :: Log
+globalLogger ∷ Log
 globalLogger = unsafePerformIO $ do
-    cfg <- newMVar $ rules_ []
-    newLog (mvarCfg cfg) [logger text console]
+	cfg <- newMVar $ rules_ []
+	newLog (mvarCfg cfg) [logger text console]
 
-runGlobalLog :: LogT IO a -> IO a
+runGlobalLog ∷ LogT IO a → IO a
 runGlobalLog = withLog globalLogger
 
-runConsoleLog :: RulesLoad -> LogT IO a -> IO a
+runConsoleLog ∷ RulesLoad → LogT IO a → IO a
 runConsoleLog rs = runLog rs [logger text console]
 
-runLogChan :: MonadIO m => (Chan w -> Logger) -> RulesLoad -> LogT m a -> m (a, [w])
+runLogChan ∷ MonadIO m => (Chan w → Logger) → RulesLoad → LogT m a → m (a, [w])
 runLogChan c rs act = do
-    ch <- liftIO newChan
-    mch <- liftIO newChan
-    _ <- liftIO $ forkIO $ getChanContents ch >>= mapM_ (writeChan mch . Just)
-    r <- runLog rs [c ch] act
-    liftIO $ writeChan mch Nothing
-    msgs <- liftIO ((catMaybes . takeWhile isJust) <$> getChanContents mch)
-    return (r, msgs)
+	ch <- liftIO newChan
+	mch <- liftIO newChan
+	_ <- liftIO $ forkIO $ getChanContents ch >>= mapM_ (writeChan mch . Just)
+	r <- runLog rs [c ch] act
+	liftIO $ writeChan mch Nothing
+	msgs <- liftIO ((catMaybes . takeWhile isJust) <$> getChanContents mch)
+	return (r, msgs)
 
-runLogMsgs :: MonadIO m => RulesLoad -> LogT m a -> m (a, [Message])
+runLogMsgs ∷ MonadIO m => RulesLoad → LogT m a → m (a, [Message])
 runLogMsgs = runLogChan chan
 
-runLogTexts :: MonadIO m => RulesLoad -> LogT m a -> m (a, [Text])
+runLogTexts ∷ MonadIO m => RulesLoad → LogT m a → m (a, [Text])
 runLogTexts = runLogChan (logger text . chan)

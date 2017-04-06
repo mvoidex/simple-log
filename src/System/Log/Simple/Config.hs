@@ -1,11 +1,11 @@
 {-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
 
 module System.Log.Simple.Config (
-    parseRule, parseRules,
-    parseRule_, parseRules_,
-    rule_, rules_,
-    rulesCfg, mvarCfg, fileCfg
-    ) where
+	parseRule, parseRules,
+	parseRule_, parseRules_,
+	rule_, rules_,
+	rulesCfg, mvarCfg, fileCfg
+	) where
 
 import Control.Arrow
 import Control.Concurrent
@@ -29,13 +29,13 @@ import System.Log.Simple.Base
 --
 -- where \"path\" is argument for 'path', and \"rule\" is one of
 --
---     * /low low-value/ for 'low'
+--	 * /low low-value/ for 'low'
 --
---     * /high high-value/ for 'high'
+--	 * /high high-value/ for 'high'
 --
---     * /set low-value high-value/ for 'politics'
+--	 * /set low-value high-value/ for 'politics'
 --
---     * /use predefind/ for 'use'
+--	 * /use predefind/ for 'use'
 --
 -- Examples:
 --
@@ -45,88 +45,88 @@ import System.Log.Simple.Base
 -- foo\/bar\/quux: use silent
 -- @
 --
-parseRule :: Text -> Writer [Text] Rule
+parseRule ∷ Text → Writer [Text] Rule
 parseRule txt = do
-    r' <- parseUses . T.strip . T.drop 1 $ r
-    return $ T.strip p %= r'
-    where
-        (p, r) = T.break (== ':') txt
-        parseUses uses = do
-            tell $ map T.pack fails
-            return $ foldr (.) id oks
-            where
-                (fails, oks) = (lefts &&& rights) . map (parseUse . T.strip) . T.split (== ',') $ uses
+	r' <- parseUses . T.strip . T.drop 1 $ r
+	return $ T.strip p %= r'
+	where
+		(p, r) = T.break (== ':') txt
+		parseUses uses = do
+			tell $ map T.pack fails
+			return $ foldr (.) id oks
+			where
+				(fails, oks) = (lefts &&& rights) . map (parseUse . T.strip) . T.split (== ',') $ uses
 
-        parseUse u = case map T.strip . T.words $ u of
-            ["low", v] -> low <$> value v
-            ["high", v] -> high <$> value v
-            ["set", l, h] -> politics <$> value l <*> value h
-            ["use", v] -> use <$> predefined v
-            _ -> throwError $ "Unable to parse: " ++ T.unpack u
+		parseUse u = case map T.strip . T.words $ u of
+			["low", v] → low <$> value v
+			["high", v] → high <$> value v
+			["set", l, h] → politics <$> value l <*> value h
+			["use", v] → use <$> predefined v
+			_ → throwError $ "Unable to parse: " ++ T.unpack u
 
-        value v = maybe noValue return $ lookup v values where
-            noValue = throwError $ "Invalid value: " ++ T.unpack v
+		value v = maybe noValue return $ lookup v values where
+			noValue = throwError $ "Invalid value: " ++ T.unpack v
 
-        predefined v = maybe noPredefined return $ lookup v predefineds where
-            noPredefined = throwError $ "Invalid predefined: " ++ T.unpack v
+		predefined v = maybe noPredefined return $ lookup v predefineds where
+			noPredefined = throwError $ "Invalid predefined: " ++ T.unpack v
 
-parseRules :: Text -> Writer [Text] Rules
+parseRules ∷ Text → Writer [Text] Rules
 parseRules = mapM parseRule . filter (not . T.null . T.strip) . T.lines
 
 -- | Try parse rule ignoring errors
-parseRule_ :: Text -> Rule
+parseRule_ ∷ Text → Rule
 parseRule_ = fst . runWriter . parseRule
 
 -- | Try parse rules ignoring errors
-parseRules_ :: Text -> Rules
+parseRules_ ∷ Text → Rules
 parseRules_ = fst . runWriter . parseRules
 
-rule_ :: Text -> Rule
+rule_ ∷ Text → Rule
 rule_ = parseRule_
 
-rules_ :: [Text] -> Rules
+rules_ ∷ [Text] → Rules
 rules_ = map rule_
 
 -- | Value names
-values :: [(Text, Level)]
+values ∷ [(Text, Level)]
 values = [
-    ("trace", Trace),
-    ("debug", Debug),
-    ("info", Info),
-    ("warning", Warning),
-    ("error", Error),
-    ("fatal", Fatal)]
+	("trace", Trace),
+	("debug", Debug),
+	("info", Info),
+	("warning", Warning),
+	("error", Error),
+	("fatal", Fatal)]
 
 -- | Predefined politics
-predefineds :: [(Text, Politics)]
+predefineds ∷ [(Text, Politics)]
 predefineds = [
-    ("default", defaultPolitics),
-    ("debug", debugPolitics),
-    ("trace", tracePolitics),
-    ("silent", silentPolitics),
-    ("supress", supressPolitics)]
+	("default", defaultPolitics),
+	("debug", debugPolitics),
+	("trace", tracePolitics),
+	("silent", silentPolitics),
+	("supress", supressPolitics)]
 
 -- | Constant rules
-rulesCfg :: Rules -> IO (IO Rules)
+rulesCfg ∷ Rules → IO (IO Rules)
 rulesCfg = return . return
 
 -- | Rules from mvar
-mvarCfg :: MVar Rules -> IO (IO Rules)
+mvarCfg ∷ MVar Rules → IO (IO Rules)
 mvarCfg = return . readMVar
 
 -- | Rules from file
-fileCfg :: FilePath -> Int -> IO (IO Rules)
+fileCfg ∷ FilePath → Int → IO (IO Rules)
 fileCfg f seconds = do
-    rs <- readRules
-    var <- newMVar rs
-    when (seconds /= 0) $ void $ forkIO $ forever $ handle ignoreIO $ do
-        threadDelay (seconds * 1000000)
-        rs' <- readRules
-        void $ swapMVar var rs'
-    mvarCfg var
-    where
-        readRules = do
-            cts <- T.readFile f
-            return . parseRules_ $ cts
-        ignoreIO :: IOException -> IO ()
-        ignoreIO _ = return ()
+	rs <- readRules
+	var <- newMVar rs
+	when (seconds /= 0) $ void $ forkIO $ forever $ handle ignoreIO $ do
+		threadDelay (seconds * 1000000)
+		rs' <- readRules
+		void $ swapMVar var rs'
+	mvarCfg var
+	where
+		readRules = do
+			cts <- T.readFile f
+			return . parseRules_ $ cts
+		ignoreIO ∷ IOException → IO ()
+		ignoreIO _ = return ()
