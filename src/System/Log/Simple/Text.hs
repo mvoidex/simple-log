@@ -4,7 +4,6 @@ module System.Log.Simple.Text (
 	) where
 
 import Data.Text (Text)
-import qualified Data.Text as T
 import Data.Time
 import Text.Format
 
@@ -15,11 +14,12 @@ defaultTimeFormat ∷ String
 defaultTimeFormat = "%_Y-%m-%d %T %z"
 
 textFmt ∷ String → String → Converter Text
-textFmt tmFmt msgFmt (Message tm l p msg) = format msgFmt ~~ args where
+textFmt tmFmt msgFmt (Message tm l comp scope msg) = format msgFmt ~~ args where
 	args = [
 		"time" ~% formatTime defaultTimeLocale tmFmt tm,
 		"level" ~% toStr l,
-		"scope" ~% T.intercalate (T.pack "/") p,
+		"component" ~% comp,
+		"scope" ~% scope,
 		"message" ~% msg]
 	toStr Trace = "TRACE"
 	toStr Debug = "DEBUG"
@@ -30,10 +30,10 @@ textFmt tmFmt msgFmt (Message tm l p msg) = format msgFmt ~~ args where
 
 -- | Text log converter with default time format
 text ∷ Converter Text
-text = textFmt defaultTimeFormat "{time}\t{level}\t{scope}> {message}"
+text = textFmt defaultTimeFormat "{time}\t{level}\t{component}:{scope}> {message}"
 
 shortText ∷ Converter Text
-shortText = textFmt defaultTimeFormat "{level}: {message}"
+shortText = textFmt defaultTimeFormat "{level}\t{component}: {message}"
 
 msgOnly ∷ Converter Text
 msgOnly = textFmt defaultTimeFormat "{message}"

@@ -1,161 +1,127 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, TemplateHaskell, RankNTypes #-}
 
 module System.Log.Simple.Base (
-	Level(..),
-	Politics(..), Rule(..), Rules,
-	defaultPolitics, debugPolitics, tracePolitics, silentPolitics, supressPolitics,
-	rule, absolute, relative, child, root, path,
-	(%=),
-	politics, use, low, high,
+	Level(..), level, level_,
+	Component(..), Scope(..),
 	Message(..),
 	Converter, Consumer(..),
-	Entry(..), Command(..),
-	entries, flatten, rules,
-	Logger, logger,
-	RulesLoad,
-	Log(..), noLog,
-	newLog,
-	writeLog,
-	stopLog,
-	scopeLog_,
-	scopeLog,
-	scoperLog
+	LogHandler, handler,
+	LogConfig(..), defCfg, logCfg, componentCfg, componentLevel,
+	Log(..),
+	newLog, rootLog, getLog, subLog, updateLogConfig, writeLog, stopLog,
 	) where
 
-import Prelude hiding (log)
+import Prelude.Unicode
 
-import Control.Arrow
+import Control.Applicative
 import qualified Control.Exception as E
 import Control.Concurrent
 import qualified Control.Concurrent.Async as A
-import Control.Concurrent.MSem
 import Control.DeepSeq
 import Control.Monad
-import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Data.Default
-import Data.List
+import Data.Map (Map)
 import qualified Data.Map as M
-import Data.Maybe (catMaybes, isJust)
+import Data.Maybe (catMaybes, isJust, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
 import Data.String
-import GHC.Stack
+import Lens.Micro.Platform
+import Text.Format
+
+
+-- Helper function
+splitBy ∷ Char → Text → [Text]
+splitBy _ "" = []
+splitBy ch t = T.split (≡ ch) t
+
+
 
 -- | Level of message
 data Level = Trace | Debug | Info | Warning | Error | Fatal
 	deriving (Eq, Ord, Read, Show, Enum, Bounded)
 
--- | Scope politics, politics defines two levels:
--- low - messages with < level won't be written in normal-mode
--- high - messages with > level turns on detailed-mode for current scope (in this case all messages are written)
-data Politics = Politics {
-	politicsLow ∷ Level,
-	politicsHigh ∷ Level }
-		deriving (Eq, Ord, Read, Show)
+instance Default Level where
+	def = Trace
 
-instance Default Politics where
-	def = defaultPolitics
+-- | Component — each one have separate log scopes and can have different politics
+-- Child component's root politics inherits its parent root politics
+-- Component name parts stored in reverse order
+newtype Component = Component { componentPath ∷ [Text] } deriving (Eq, Ord)
 
--- | Default politics: log all ≥ @Info@, turn detailed log on if > @Warning@
-defaultPolitics ∷ Politics
-defaultPolitics = Politics Info Warning
+instance Show Component where
+	show = T.unpack ∘ T.intercalate "." ∘ reverse ∘ componentPath
 
--- | Debug politics: log all ≥ @Debug@, turn detailed log for > @Info@
-debugPolitics ∷ Politics
-debugPolitics = Politics Debug Info
+instance FormatBuild Component
 
--- | Trace politics: log everything
-tracePolitics ∷ Politics
-tracePolitics = Politics Trace Info
+instance Read Component where
+	readsPrec _ = return ∘ flip (,) "" ∘ Component ∘ reverse ∘ splitBy '.' ∘ T.pack
 
--- | Silent politics: log only ≥ @Info@, no detailed-mode 
-silentPolitics ∷ Politics
-silentPolitics = Politics Info Fatal
+instance IsString Component where
+	fromString = read
 
--- | Supress all messages politics
-supressPolitics ∷ Politics
-supressPolitics = Politics Fatal Fatal
+instance Monoid Component where
+	mempty = Component []
+	Component l `mappend` Component r = Component $ r ++ l
 
--- | Rule for politics
-data Rule = Rule {
-	rulePath ∷ [Text] → Bool,
-	rulePolitics ∷ Politics → Politics }
+instance NFData Component where
+	rnf (Component cs) = rnf cs
 
-type Rules = [Rule]
+-- | Log scope, also stored in reverse order
+newtype Scope = Scope { scopePath ∷ [Text] } deriving (Eq, Ord)
 
--- | Make rule
-rule ∷ ([Text] → Bool) → (Politics → Politics) → Rule
-rule = Rule
+instance Show Scope where
+	show = T.unpack ∘ T.intercalate "/" ∘ reverse ∘ scopePath
 
--- | Absolute scope-path
-absolute ∷ [Text] → [Text] → Bool
-absolute p = (== p)
+instance FormatBuild Scope
 
--- | Relative scope-path
-relative ∷ [Text] → [Text] → Bool
-relative p = (p `isSuffixOf`)
+instance Read Scope where
+	readsPrec _ = return ∘ flip (,) "" ∘ Scope ∘ reverse ∘ splitBy '/' ∘ T.pack
 
--- | Scope-path for child
-child ∷ ([Text] → Bool) → [Text] → Bool
-child _ [] = False
-child r (_:ps) = r ps
+instance IsString Scope where
+	fromString = read
 
--- | Root scope-path
-root ∷ [Text] → Bool
-root = null
+instance Monoid Scope where
+	mempty = Scope []
+	Scope l `mappend` Scope r = Scope $ r ++ l
 
--- | Scope-path by text
---
--- @
--- \/ -- root
--- foo\/bar -- relative
--- \/foo\/bar -- absolute
--- foo\/bar\/ -- child of relative
--- \/foo\/bar\/ -- child of absolute
--- @
---
-path ∷ Text → ([Text] → Bool)
-path "/" = root
-path p = path' $ T.split (== '/') p where
-	path' ps
-		| null ps = const False
-		| T.null (head ps) && T.null (last ps) = child . absolute . init . tail $ ps
-		| T.null (head ps) = absolute . tail $ ps
-		| T.null (last ps) = child . relative . init $ ps
-		| otherwise = relative ps
+instance NFData Scope where
+	rnf (Scope s) = rnf s
 
--- | Rule by path
-(%=) ∷ Text → (Politics → Politics) → Rule
-p %= r = rule (path p) r
+class HasParent a where
+	getParent ∷ a → Maybe a
 
--- | Just set new politics
-politics ∷ Level → Level → Politics → Politics
-politics l h _ = Politics l h
+instance HasParent Component where
+	getParent (Component []) = Nothing
+	getParent (Component (_:cs)) = Just $ Component cs
 
--- | Use predefined politics
-use ∷ Politics → Politics → Politics
-use p _ = p
+instance HasParent Scope where
+	getParent (Scope []) = Nothing
+	getParent (Scope (_:ps)) = Just $ Scope ps
 
--- | Set new low level
-low ∷ Level → Politics → Politics
-low l (Politics _ h) = Politics l h
+-- | Parse level
+level ∷ Text → Maybe Level
+level = flip M.lookup levels ∘ T.toLower where
+	levels = M.fromList [(T.toLower ∘ T.pack ∘ show $ l', l') | l' ← [minBound .. maxBound]]
 
--- | Set new high level
-high ∷ Level → Politics → Politics
-high h (Politics l _) = Politics l h
+-- | Parse level, failing on invalid input
+level_ ∷ Text → Level
+level_ t = fromMaybe (error errMsg) ∘ level $ t where
+	errMsg = "invalid level: " ++ T.unpack t
 
 -- | Log message
 data Message = Message {
 	messageTime ∷ ZonedTime,
 	messageLevel ∷ Level,
-	messagePath ∷ [Text],
+	messageComponent ∷ Component,
+	messageScope ∷ Scope,
 	messageText ∷ Text }
 		deriving (Read, Show)
 
 instance NFData Message where
-	rnf (Message t l p m) = t `seq` l `seq` rnf p `seq` rnf m
+	rnf (Message t l c s m) = t `seq` l  `seq` rnf c `seq` rnf s `seq` rnf m
 
 -- | Converts message some representation
 type Converter a = Message → a
@@ -164,213 +130,164 @@ type Converter a = Message → a
 data Consumer a = Consumer {
 	withConsumer ∷ ((a → IO ()) → IO ()) → IO () }
 
--- | Logger
-type Logger = Consumer Message
+-- | Message handler
+type LogHandler = Consumer Message
 
 -- | Convert consumer creater to logger creater
-logger ∷ Converter a → Consumer a → Consumer Message
-logger conv (Consumer withCons) = Consumer withCons' where
+handler ∷ Converter a → Consumer a → Consumer Message
+handler conv (Consumer withCons) = Consumer withCons' where
 	withCons' f = withCons $ \logMsg → f (logMsg . conv)
+
+data LogConfig = LogConfig {
+	_logConfigMap ∷ Map Component Level }
+
+instance Default LogConfig where
+	def = LogConfig mempty
+
+instance Show LogConfig where
+	show (LogConfig cfg) = unlines [show comp ++ ":" ++ show lev | (comp, lev) ← M.toList cfg]
+
+-- | Default log config — info level
+defCfg ∷ LogConfig
+defCfg = def
+
+-- | Make log config by list of components and levels
+logCfg ∷ [(Component, Level)] → LogConfig
+logCfg = LogConfig ∘ M.fromList
+
+makeLenses ''LogConfig
+
+-- | Component config level lens
+componentCfg ∷ Component → Lens' LogConfig (Maybe Level)
+componentCfg comp = logConfigMap . at comp
+
+-- | Get politics for specified component
+componentLevel ∷ LogConfig → Component → Level
+componentLevel cfg comp = fromMaybe def $ (cfg ^. componentCfg comp) <|> (componentLevel cfg <$> getParent comp)
 
 -- | Log
 data Log = Log {
-	logPost ∷ Command → IO (),
+	-- | Current log component
+	logComponent ∷ Component,
+	-- | Current log scope
+	logScope ∷ Scope,
+	-- | Log message, it is low-level function, i.e. it doesn't take into account current component and scope and writes message as is
+	logPost ∷ Message → IO (),
+	-- | Stop log and wait until it writes all
 	logStop ∷ IO (),
-	logRules ∷ IO Rules }
+	-- | Log config
+	logConfig ∷ MVar LogConfig }
 
--- | Empty log
-noLog ∷ Log
-noLog = Log post' (return ()) (return []) where
-	post' (EnterScope _ _) = return ()
-	post' (LeaveScope io) = io
-	post' (PostMessage _) = return ()
-
--- | Type to initialize rule updater
-type RulesLoad = IO (IO Rules)
-
-type ThreadMap = M.Map ThreadId (A.Async (), Chan (Maybe Command))
 type FChan a = Chan (Maybe a)
+type LogId = (Component, ThreadId)
+type LogJob = (A.Async (), FChan Message)
+type LogMap = Map LogId LogJob
 
 writeFChan ∷ FChan a → a → IO ()
-writeFChan ch = writeChan ch . Just
+writeFChan ch = writeChan ch ∘ Just
 
 stopFChan ∷ FChan a → IO ()
 stopFChan ch = writeChan ch Nothing
 
 getFChanContents ∷ FChan a → IO [a]
-getFChanContents = liftM (catMaybes . takeWhile isJust) . getChanContents
+getFChanContents = liftM (catMaybes ∘ takeWhile isJust) ∘ getChanContents
 
--- | Create log
+-- | Create log, returns root logger for root component
 --
--- Messages from distinct threads are splitted in several chans, where they are processed, and then messages combined back and sent to log-thread
+-- Messages from distinct threads and components are splitted in several chans, where they are processed, and then messages combined back and sent to log-thread
 --
-newLog ∷ RulesLoad → [Logger] → IO Log
-newLog _ [] = return noLog
-newLog rsInit ls = do
-	ch <- newChan ∷ IO (FChan (ThreadId, Command))
-	chOut <- newChan ∷ IO (FChan Command)
-	cts <- getFChanContents ch
-	msgs <- getFChanContents chOut
-	rs <- rsInit
-	r <- rs
+newLog ∷ LogConfig → [LogHandler] → IO Log
+newLog cfg handlers = do
+	ch ← newChan ∷ IO (FChan (LogId, Message))
+	chOut ← newChan ∷ IO (FChan Message)
+	cts ← getFChanContents ch
+	msgs ← getFChanContents chOut
+	cfgVar ← newMVar cfg
 
 	let
 		-- | Write commands from separate threads to separate channels
-		process ∷ ThreadMap → (ThreadId, Command) → IO ThreadMap
-		process m (thId, cmd) = do
-			(thAsync, thChan) <- maybe newChild return $ M.lookup thId m
-			writeFChan thChan cmd
-			return $ M.insert thId (thAsync, thChan) m
+		process ∷ LogMap → (LogId, Message) → IO LogMap
+		process m (logId, msg) = do
+			(thAsync, thChan) ← maybe newChild return $ M.lookup logId m
+			writeFChan thChan msg
+			return $ M.insert logId (thAsync, thChan) m
 
 		-- | Stop all spawned asyncs for threads
-		stopChildren ∷ ThreadMap → IO ()
+		stopChildren ∷ LogMap → IO ()
 		stopChildren m = do
 			forM_ (M.elems m) $ \(thAsync, thChan) → do
 				stopFChan thChan
 				A.wait thAsync
 			stopFChan chOut
 
-		-- | New chan for thread, accepts commands from thread, writes processed messages to log-thread
-		newChild ∷ IO (A.Async (), FChan Command)
-		newChild = do
-			thChan <- newChan
-			thCts <- getFChanContents thChan
-			thAsync <- A.async $ mapM_ (writeFChan chOut) $
-				uncommand thCts
-			return (thAsync, thChan)
+		-- | Pass message firther if it passes config
+		passMessage ∷ (Message → IO ()) → Message → IO ()
+		passMessage fn msg = do
+			cfg' ← readMVar cfgVar
+			when (componentLevel cfg' (messageComponent msg) ≤ messageLevel msg) $ fn msg
 
-		-- | Filter commands
-		uncommand ∷ [Command] → [Command]
-		uncommand = flatten . rules r [] . entries
+		-- | New chan for thread, accepts commands from thread, writes processed messages to log-thread
+		newChild ∷ IO (A.Async (), FChan Message)
+		newChild = do
+			thChan ← newChan
+			thCts ← getFChanContents thChan
+			thAsync ← A.async $ mapM_ (passMessage $ writeFChan chOut) thCts
+			return (thAsync, thChan)
 
 		fatalMsg ∷ String → IO Message
 		fatalMsg s = do
-			tm <- getZonedTime
-			return $ Message tm Fatal ["*"] $ fromString s
+			tm ← getZonedTime
+			return $ Message tm Fatal "*" "" $ fromString s
 
 		-- | Perform log
-		tryLog ∷ (Message → IO ()) → Command → IO ()
-		tryLog _ (EnterScope _ _) = return ()
-		tryLog logMsg (PostMessage m) = E.handle onError (m `deepseq` logMsg m) where
+		tryLog ∷ (Message → IO ()) → Message → IO ()
+		tryLog logMsg m = E.handle onError (m `deepseq` logMsg m) where
 			onError ∷ E.SomeException → IO ()
 			onError e = E.handle ignoreError $ fatalMsg ("Exception during logging message: " ++ show e) >>= logMsg
 			ignoreError ∷ E.SomeException → IO ()
 			ignoreError _ = return ()
-		tryLog _ (LeaveScope io) = io
 
 		-- | Initialize all loggers
-		startLog ∷ Logger → IO ()
+		startLog ∷ LogHandler → IO ()
 		startLog (Consumer withCons) = withCons $ \logMsg → do
 			mapM_ (tryLog logMsg) msgs
 
-		-- | Write command with myThreadId
-		writeCommand ∷ Command → IO ()
-		writeCommand cmd = do
-			i <- myThreadId
-			writeFChan ch (i, cmd)
+		-- | Write message with myThreadId
+		writeMessage ∷ Message → IO ()
+		writeMessage msg = do
+			my ← myThreadId
+			writeFChan ch ((messageComponent msg, my), msg)
 
-	p <- A.async $ void $ do
-		m <- foldM process M.empty cts
+	p ← A.async $ void $ do
+		m ← foldM process M.empty cts
 		stopChildren m
-	mapM_ (forkIO . startLog) ls
-	return $ Log writeCommand (stopFChan ch >> A.wait p) rs
+	mapM_ (forkIO ∘ startLog) handlers
+	return $ Log mempty mempty writeMessage (stopFChan ch >> A.wait p) cfgVar
 
--- | Write message to log
-writeLog ∷ MonadIO m => Log → Level → Text → m ()
-writeLog (Log post _ _) l msg = liftIO $ do
-	tm <- getZonedTime
-	post $ PostMessage (Message tm l [] msg)
+-- | Get root log, i.e. just drop current component and scope
+rootLog ∷ Log → Log
+rootLog l = l { logComponent = mempty, logScope = mempty }
+
+-- | Get log for specified component and scope
+getLog ∷ Component → Scope → Log → Log
+getLog comp scope l = l { logComponent = comp, logScope = scope }
+
+-- | Get sub-log
+subLog ∷ Component → Scope → Log → Log
+subLog comp scope l = l {
+	logComponent = logComponent l `mappend` comp,
+	logScope = logScope l `mappend` scope }
+
+-- | Modify log config
+updateLogConfig ∷ MonadIO m ⇒ Log → (LogConfig → LogConfig) → m ()
+updateLogConfig l update = liftIO $ modifyMVar_ (logConfig l) (return ∘ update)
+
+-- | Write message to log for current component and scope
+writeLog ∷ MonadIO m ⇒ Log → Level → Text → m ()
+writeLog (Log comp scope post _ _) l msg = liftIO $ do
+	tm ← getZonedTime
+	post $ Message tm l comp scope msg
 
 -- | Wait log messages and stop log
-stopLog ∷ MonadIO m => Log → m ()
-stopLog (Log _ stop _) = liftIO stop
-
--- | New log-scope
-scopeLog_ ∷ (MonadIO m, MonadMask m) => Log → Text → m a → m a
-scopeLog_ (Log post _ getRules) s act = do
-	rs <- liftIO getRules
-	sem <- liftIO $ new (0 ∷ Integer)
-	bracket_
-		(liftIO $ post $ EnterScope s rs)
-		(liftIO $ post (LeaveScope $ signal sem) >> wait sem)
-		act
-
--- | New log-scope with lifting exceptions as errors
-scopeLog ∷ (MonadIO m, MonadMask m) => Log → Text → m a → m a
-scopeLog l s act = scopeLog_ l s (catch act onError) where
-	onError ∷ (MonadIO m, MonadThrow m, HasCallStack) => E.SomeException → m a
-	onError e = do
-		writeLog l Error $ fromString $ unlines [
-			"Scope leaves with exception: " ++ show e,
-			prettyCallStack callStack]
-		throwM e
-
--- | New log-scope with tracing scope result
-scoperLog ∷ (MonadIO m, MonadMask m) => Show a => Log → Text → m a → m a
-scoperLog l s act = do
-	r <- scopeLog l s act
-	writeLog l Trace $ T.concat ["Scope ", s, " leaves with result: ", fromString . show $ r]
-	return r
-
--- | Log entry, scope or message
-data Entry =
-	Entry Message |
-	Scope Text Rules (IO ()) [Entry]
-
-foldEntry ∷ (Message → a) → (Text → Rules → IO () → [a] → a) → Entry → a
-foldEntry r _ (Entry m) = r m
-foldEntry r s (Scope t rs io es) = s t rs io (map (foldEntry r s) es)
-
--- | Command to logger
-data Command =
-	EnterScope Text Rules |
-	LeaveScope (IO ()) |
-	PostMessage Message
-
--- | Apply commands to construct list of entries
-entries ∷ [Command] → [Entry]
-entries = fst . fst . entries' where
-	entries' ∷ [Command] → (([Entry], IO ()), [Command])
-	entries' [] = (([], return ()), [])
-	entries' (EnterScope s scopeRules : cs) = first (first (Scope s scopeRules io rs :)) $ entries' cs' where
-		((rs, io), cs') = entries' cs
-	entries' (LeaveScope io : cs) = (([], io), cs)
-	entries' (PostMessage m : cs) = first (first (Entry m :)) $ entries' cs
-
--- | Flatten entries to raw list of commands
-flatten ∷ [Entry] → [Command]
-flatten = concatMap $ foldEntry postMessage flatScope where
-	postMessage ∷ Message → [Command]
-	postMessage m = [PostMessage m]
-	flatScope ∷ Text → Rules → IO () → [[Command]] → [Command]
-	flatScope s rs io cs = EnterScope s rs : (map (addScope s) (concat cs) ++ [LeaveScope io])
-	addScope ∷ Text → Command → Command
-	addScope s (PostMessage (Message tm l p str)) = PostMessage $ Message tm l (s : p) str
-	addScope _ m = m
-
--- | Apply rules
-rules ∷ Rules → [Text] → [Entry] → [Entry]
-rules rs rpath = map untraceScope . concatEntries . first (partition isNotTrace) . break isError where
-	-- untrace inner scopes
-	untraceScope (Entry msg) = Entry msg
-	untraceScope (Scope t scopeRules io es) = Scope t scopeRules io $ rules scopeRules (t : rpath) es
-
-	-- current politics
-	ps = apply rs (reverse rpath) defaultPolitics
-
-	-- If there is no errors, use only infos and scopes and drop all traces
-	-- otherwise concat all messages
-	concatEntries ((x, y), z) = x ++ if null z then [] else y ++ z
-
-	isError = onLevel False (> politicsHigh ps)
-	isNotTrace = onLevel True (>= politicsLow ps)
-
-	onLevel ∷ a → (Level → a) → Entry → a
-	onLevel v _ (Scope _ _ _ _) = v
-	onLevel _ f (Entry (Message _ l _ _)) = f l
-
--- | Apply rules to path
-apply ∷ Rules → [Text] → Politics → Politics
-apply rs = foldr (.) id . map applier . reverse . inits where
-	applier ∷ [Text] → Politics → Politics
-	applier spath = foldr (.) id . map rulePolitics . filter (`rulePath` spath) $ rs
+stopLog ∷ MonadIO m ⇒ Log → m ()
+stopLog = liftIO ∘ logStop

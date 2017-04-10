@@ -1,162 +1,122 @@
-{-# LANGUAGE OverloadedStrings, FlexibleInstances, UndecidableInstances, MultiParamTypeClasses, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings, FlexibleInstances, UndecidableInstances, MultiParamTypeClasses, GeneralizedNewtypeDeriving, ConstraintKinds, FlexibleContexts #-}
 
 module System.Log.Simple.Monad (
-	LogT(..),
-	withNoLog, withLog,
-	runLog, runNoLog,
+	-- | Monad log
+	MonadLog, LogT(..),
+	noLog, withLog, runLog,
+
+	-- | Getters
+	askLog, askComponent, askScope,
+
+	-- | Log functions
 	log, sendLog,
-	scope_,
-	scope,
-	scopeM_,
-	scopeM,
-	scoper,
-	scoperM,
-	ignoreError,
-	ignoreErrorM,
+	component,
+	scope_, scope, scopeM, scoper, scoperM,
 	trace,
-	MonadLog(..)
 	) where
 
 import Prelude hiding (log)
+import Prelude.Unicode
 
 import Control.Exception (SomeException)
-import Control.Concurrent.MSem
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import Control.Monad.State
-import qualified Control.Monad.State.Strict as Strict
-import Control.Monad.Writer
-import qualified Control.Monad.Writer.Strict as Strict
 import Control.Monad.Except
 import Control.Monad.Catch
 import Data.String
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Time
 import GHC.Stack
 import System.Log.Simple.Base
 
-class (MonadIO m, MonadMask m) => MonadLog m where
-	askLog ∷ m Log
-
-instance MonadLog m => MonadLog (ReaderT r m) where
-	askLog = lift askLog
-
-instance MonadLog m => MonadLog (StateT s m) where
-	askLog = lift askLog
-
-instance MonadLog m => MonadLog (Strict.StateT s m) where
-	askLog = lift askLog
-
-instance (Monoid w, MonadLog m) => MonadLog (WriterT w m) where
-	askLog = lift askLog
-
-instance (Monoid w, MonadLog m) => MonadLog (Strict.WriterT w m) where
-	askLog = lift askLog
+type MonadLog m = (MonadIO m, MonadMask m, MonadReader Log m)
 
 newtype LogT m a = LogT { runLogT ∷ ReaderT Log m a }
 	deriving (Functor, Applicative, Monad, MonadIO, MonadReader Log, MonadThrow, MonadCatch, MonadMask)
 
 instance MonadTrans LogT where
-	lift = LogT . lift
+	lift = LogT ∘ lift
 
-instance (MonadIO m, MonadMask m) => MonadLog (LogT m) where
-	askLog = LogT ask
+-- | Run with no logging
+noLog ∷ MonadIO m ⇒ LogT m a → m a
+noLog = runLog defCfg []
 
-withNoLog ∷ LogT m a → m a
-withNoLog act = runReaderT (runLogT act) noLog
-
+-- | Run @LogT@ monad with @Log@
 withLog ∷ Log → LogT m a → m a
 withLog l act = runReaderT (runLogT act) l
 
-runLog ∷ MonadIO m => RulesLoad → [Logger] → LogT m a → m a
-runLog rs ls act = do
-	l <- liftIO $ newLog rs ls
+-- | Run @LogT@ monad with log config and handlers
+runLog ∷ MonadIO m ⇒ LogConfig → [LogHandler] → LogT m a → m a
+runLog cfg handlers act = do
+	l ← liftIO $ newLog cfg handlers
 	withLog l act
 
-runNoLog ∷ LogT m a → m a
-runNoLog = withNoLog
+-- | Ask log
+askLog ∷ MonadLog m ⇒ m Log
+askLog = ask
 
-log ∷ (MonadLog m) => Level → Text → m ()
-log l msg = do
-	(Log post _ _) <- askLog
-	tm <- liftIO getZonedTime
-	liftIO $ post $ PostMessage (Message tm l [] msg)
+-- | Ask current component
+askComponent ∷ MonadLog m ⇒ m Component
+askComponent = asks logComponent
 
-sendLog ∷ MonadLog m => Level → Text → m ()
+-- | Ask current scope
+askScope ∷ MonadLog m ⇒ m Scope
+askScope = asks logScope
+
+-- | Log message
+log ∷ MonadLog m ⇒ Level → Text → m ()
+log lev msg = do
+	l ← ask
+	writeLog l lev msg
+
+-- | Log message, same as @log@
+sendLog ∷ MonadLog m ⇒ Level → Text → m ()
 sendLog = log
 
-scope_ ∷ (MonadLog m) => Text → m a → m a
-scope_ s act = do
-	(Log post _ getRules) <- askLog
-	rs <- liftIO getRules
-	sem <- liftIO $ new (0 ∷ Integer)
-	bracket_ (liftIO $ post $ EnterScope s rs) (liftIO (post (LeaveScope $ signal sem) >> wait sem)) act
+-- | Log component, also sets root scope
+component ∷ MonadLog m ⇒ Text → m a → m a
+component c = local (getLog (read ∘ T.unpack $ c) mempty)
+
+-- | Create local scope
+scope_ ∷ MonadLog m ⇒ Text → m a → m a
+scope_ s = local (subLog mempty (read ∘ T.unpack $ s))
 
 -- | Scope with log all exceptions
-scope ∷ (MonadLog m) => Text → m a → m a
+scope ∷ MonadLog m ⇒ Text → m a → m a
 scope s act = scope_ s $ catch act onError where
-	onError ∷ (MonadLog m, HasCallStack) => SomeException → m a
+	onError ∷ (MonadLog m, HasCallStack) ⇒ SomeException → m a
 	onError e = do
 		log Error $ T.unlines [
-			T.concat ["Scope leaves with exception: ", fromString . show $ e],
+			T.concat ["Scope leaves with exception: ", fromString ∘ show $ e],
 			fromString $ prettyCallStack callStack]
 		throwM e
 
--- | Workaround: we must explicitely post 'LeaveScope'
-scopeM_ ∷ (MonadLog m, MonadError e m) => Text → m a → m a
-scopeM_ s act = do
-	(Log post _ getRules) <- askLog
-	rs <- liftIO getRules
-	sem <- liftIO $ new (0 ∷ Integer)
-	let
-		close = liftIO $ do
-			post $ LeaveScope $ signal sem
-			wait sem
-	bracket_ (liftIO $ post $ EnterScope s rs) close (catchError act (\e → close >> throwError e))
-
--- | Scope with log exceptions from 'MonadError'
--- | Workaround: we must explicitely post 'LeaveScope'
-scopeM ∷ (Show e, MonadLog m, MonadError e m) => Text → m a → m a
-scopeM s act = scopeM_ s $ catch act' onError' where
-	onError' ∷ (MonadLog m, HasCallStack) => SomeException → m a
-	onError' e = logE e >> throwM e
-	act' = catchError act onError
-	onError ∷ (MonadLog m, Show e, MonadError e m, HasCallStack) => e → m a
-	onError e = logE e >> throwError e
-	logE ∷ (MonadLog m, Show e, HasCallStack) => e → m ()
-	logE e = log Error $ T.unlines [
-		T.concat ["Scope leaves with exception: ", fromString . show $ e],
-		fromString $ prettyCallStack callStack]
+-- | Scope with log exception from @MonadError@
+scopeM ∷ (MonadLog m, MonadError e m, Show e) ⇒ Text → m a → m a
+scopeM s act = scope_ s $ catchError act onError where
+	onError ∷ (MonadLog m, MonadError e m, Show e, HasCallStack) ⇒ e → m a
+	onError e = do
+		log Error $ T.unlines [
+			T.concat ["Scope leaves with exception: ", fromString ∘ show $ e],
+			fromString $ prettyCallStack callStack]
+		throwError e
 
 -- | Scope with tracing result
-scoper ∷ (Show a, MonadLog m) => Text → m a → m a
+scoper ∷ (MonadLog m, Show a) ⇒ Text → m a → m a
 scoper s act = do
-	r <- scope s act
+	r ← scope s act
 	log Trace $ T.concat ["Scope ", s, " leaves with result: ", fromString . show $ r]
 	return r
 
-scoperM ∷ (Show e, Show a, MonadLog m, MonadError e m) => Text → m a → m a
+scoperM ∷ (MonadLog m, MonadError e m, Show e, Show a) ⇒ Text → m a → m a
 scoperM s act = do
-	r <- scopeM s act
+	r ← scopeM s act
 	log Trace $ T.concat ["Scope", s, " leaves with result: ", fromString . show $ r]
 	return r
 
--- | Ignore error
-ignoreError ∷ (MonadLog m) => m () → m ()
-ignoreError act = catch act onError where
-	onError ∷ (MonadLog m) => SomeException → m ()
-	onError _ = return ()
-
--- | Ignore MonadError error
-ignoreErrorM ∷ (MonadLog m, MonadError e m) => m () → m ()
-ignoreErrorM act = catchError act onError where
-	onError ∷ MonadLog m => e → m ()
-	onError _ = return ()
-
 -- | Trace value
-trace ∷ (Show a, MonadLog m) => Text → m a → m a
+trace ∷ (MonadLog m, Show a) ⇒ Text → m a → m a
 trace name act = do
-	v <- act
+	v ← act
 	log Trace $ T.concat [name, " = ", fromString . show $ v]
 	return v

@@ -10,5 +10,5 @@ import System.IO
 console ∷ Consumer Text
 console = Consumer withConsole where
 	withConsole f = do
-		hSetEncoding stdout utf8
+		hSetEncoding stderr utf8
 		f T.putStrLn
