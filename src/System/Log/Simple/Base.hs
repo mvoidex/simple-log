@@ -4,11 +4,11 @@ module System.Log.Simple.Base (
 	Level(..), level, level_,
 	Component(..), Scope(..),
 	Message(..),
-	Converter, Consumer(..),
+	Converter, Consumer, consumer,
 	LogHandler, handler,
 	LogConfig(..), defCfg, logCfg, componentCfg, componentLevel,
 	Log(..),
-	newLog, rootLog, getLog, subLog, updateLogConfig, writeLog, stopLog,
+	newLog, rootLog, getLog, subLog, updateLogConfig, updateLogHandlers, writeLog, stopLog,
 	) where
 
 import Prelude.Unicode
@@ -19,8 +19,9 @@ import Control.Concurrent
 import qualified Control.Concurrent.Async as A
 import Control.DeepSeq
 import Control.Monad
-import Control.Monad.IO.Class
+import Control.Monad.Cont
 import Data.Default
+import Data.Function (fix)
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe (catMaybes, isJust, fromMaybe)
@@ -126,17 +127,19 @@ instance NFData Message where
 -- | Converts message some representation
 type Converter a = Message → a
 
--- Stores message
-data Consumer a = Consumer {
-	withConsumer ∷ ((a → IO ()) → IO ()) → IO () }
+-- | Returns function which accepts consumed value
+type Consumer a = ContT () IO (a → IO ())
+
+-- | Make consumer
+consumer ∷ (((a → IO ()) → IO ()) → IO ()) → Consumer a
+consumer = ContT
 
 -- | Message handler
 type LogHandler = Consumer Message
 
 -- | Convert consumer creater to logger creater
 handler ∷ Converter a → Consumer a → Consumer Message
-handler conv (Consumer withCons) = Consumer withCons' where
-	withCons' f = withCons $ \logMsg → f (logMsg . conv)
+handler conv = fmap (∘ conv)
 
 data LogConfig = LogConfig {
 	_logConfigMap ∷ Map Component Level }
@@ -176,7 +179,11 @@ data Log = Log {
 	-- | Stop log and wait until it writes all
 	logStop ∷ IO (),
 	-- | Log config
-	logConfig ∷ MVar LogConfig }
+	logConfig ∷ MVar LogConfig,
+	-- | Handlers list
+	logHandlers ∷ MVar [LogHandler],
+	-- | Restart all handlers
+	logRestartHandlers ∷ IO () }
 
 type FChan a = Chan (Maybe a)
 type LogId = (Component, ThreadId)
@@ -201,8 +208,9 @@ newLog cfg handlers = do
 	ch ← newChan ∷ IO (FChan (LogId, Message))
 	chOut ← newChan ∷ IO (FChan Message)
 	cts ← getFChanContents ch
-	msgs ← getFChanContents chOut
 	cfgVar ← newMVar cfg
+	handlersVar ← newMVar handlers
+	handlersThread ← newEmptyMVar
 
 	let
 		-- | Write commands from separate threads to separate channels
@@ -247,10 +255,23 @@ newLog cfg handlers = do
 			ignoreError ∷ E.SomeException → IO ()
 			ignoreError _ = return ()
 
-		-- | Initialize all loggers
-		startLog ∷ LogHandler → IO ()
-		startLog (Consumer withCons) = withCons $ \logMsg → do
-			mapM_ (tryLog logMsg) msgs
+		-- | Consume messages and send to handlers
+		runHandlers ∷ FChan Message → [LogHandler] → ContT () IO ()
+		runHandlers inCh hs = do
+			hs' ← sequence $ map (fmap tryLog) hs
+			fix $ \loop → do
+				msg ← liftIO $ readChan inCh
+				case msg of
+					Just msg' → liftIO (mapM_ ($ msg') hs') >> loop
+					Nothing → return ()
+
+		-- | Start handlers thread
+		startHandlers ∷ IO (A.Async ())
+		startHandlers = readMVar handlersVar >>= A.async ∘ flip runContT return ∘ runHandlers chOut
+
+		-- | Restart handlers thread
+		restartHandlers ∷ IO ()
+		restartHandlers = modifyMVar_ handlersThread $ \th → A.cancel th >> startHandlers
 
 		-- | Write message with myThreadId
 		writeMessage ∷ Message → IO ()
@@ -261,8 +282,15 @@ newLog cfg handlers = do
 	p ← A.async $ void $ do
 		m ← foldM process M.empty cts
 		stopChildren m
-	mapM_ (forkIO ∘ startLog) handlers
-	return $ Log mempty mempty writeMessage (stopFChan ch >> A.wait p) cfgVar
+	startHandlers >>= putMVar handlersThread
+	return $ Log {
+		logComponent = mempty,
+		logScope = mempty,
+		logPost = writeMessage,
+		logStop = stopFChan ch >> A.wait p,
+		logConfig = cfgVar,
+		logHandlers = handlersVar,
+		logRestartHandlers = restartHandlers }
 
 -- | Get root log, i.e. just drop current component and scope
 rootLog ∷ Log → Log
@@ -282,11 +310,15 @@ subLog comp scope l = l {
 updateLogConfig ∷ MonadIO m ⇒ Log → (LogConfig → LogConfig) → m ()
 updateLogConfig l update = liftIO $ modifyMVar_ (logConfig l) (return ∘ update)
 
+-- | Update log handlers, this restarts handlers thread
+updateLogHandlers ∷ MonadIO m ⇒ Log → ([LogHandler] → [LogHandler]) → m ()
+updateLogHandlers l update = liftIO $ modifyMVar_ (logHandlers l) (return ∘ update) >> logRestartHandlers l
+
 -- | Write message to log for current component and scope
 writeLog ∷ MonadIO m ⇒ Log → Level → Text → m ()
-writeLog (Log comp scope post _ _) l msg = liftIO $ do
+writeLog l lev msg = liftIO $ do
 	tm ← getZonedTime
-	post $ Message tm l comp scope msg
+	logPost l $ Message tm lev (logComponent l) (logScope l) msg
 
 -- | Wait log messages and stop log
 stopLog ∷ MonadIO m ⇒ Log → m ()

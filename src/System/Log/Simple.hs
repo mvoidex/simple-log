@@ -41,7 +41,7 @@ module System.Log.Simple (
 	module System.Log.Simple.Base,
 	module System.Log.Simple.Monad,
 	module System.Log.Simple.Text,
-	module System.Log.Simple.Console,
+	module System.Log.Simple.Stream,
 	module System.Log.Simple.File,
 
 	globalLog,
@@ -51,15 +51,20 @@ module System.Log.Simple (
 import Prelude.Unicode
 
 import Control.Monad.IO.Class
+import Control.Monad.Catch (MonadMask)
 import Control.Concurrent
 import Data.Maybe
 import Data.Text (Text)
 import System.IO.Unsafe (unsafePerformIO)
 
-import System.Log.Simple.Base (Level(..), Message, LogHandler, handler, LogConfig(..), defCfg, logCfg, componentCfg, Log(..), newLog, rootLog, getLog, subLog, updateLogConfig, writeLog, stopLog)
+import System.Log.Simple.Base (
+	Level(..), Message, Converter, Consumer, LogHandler, handler,
+	LogConfig(..), defCfg, logCfg, componentCfg, Log(..),
+	newLog, rootLog, getLog, subLog,
+	updateLogConfig, updateLogHandlers, writeLog, stopLog)
 import System.Log.Simple.Monad (MonadLog, LogT(..), noLog, withLog, runLog, askLog, sendLog, component, scope_, scope, scopeM, scoper, scoperM, trace)
 import System.Log.Simple.Text
-import System.Log.Simple.Console
+import System.Log.Simple.Stream
 import System.Log.Simple.File
 import System.Log.Simple.Chan
 
@@ -72,7 +77,7 @@ runGlobalLog = withLog globalLog
 runConsoleLog ∷ LogConfig → LogT IO a → IO a
 runConsoleLog cfg = runLog cfg [handler text console]
 
-runLogChan ∷ MonadIO m ⇒ (Chan w → LogHandler) → LogConfig → LogT m a → m (a, [w])
+runLogChan ∷ (MonadIO m, MonadMask m) ⇒ (Chan w → LogHandler) → LogConfig → LogT m a → m (a, [w])
 runLogChan c cfg act = do
 	ch ← liftIO newChan
 	mch ← liftIO newChan
@@ -82,8 +87,8 @@ runLogChan c cfg act = do
 	msgs ← liftIO ((catMaybes ∘ takeWhile isJust) <$> getChanContents mch)
 	return (r, msgs)
 
-runLogMsgs ∷ MonadIO m ⇒ LogConfig → LogT m a → m (a, [Message])
+runLogMsgs ∷ (MonadIO m, MonadMask m) ⇒ LogConfig → LogT m a → m (a, [Message])
 runLogMsgs = runLogChan chan
 
-runLogTexts ∷ MonadIO m ⇒ LogConfig → LogT m a → m (a, [Text])
-runLogTexts = runLogChan (handler text ∘ chan)
+runLogTexts ∷ (MonadIO m, MonadMask m) ⇒ Converter Text → LogConfig → LogT m a → m (a, [Text])
+runLogTexts txt = runLogChan (handler txt ∘ chan)

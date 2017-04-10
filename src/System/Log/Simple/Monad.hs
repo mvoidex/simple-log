@@ -38,7 +38,7 @@ instance MonadTrans LogT where
 	lift = LogT ∘ lift
 
 -- | Run with no logging
-noLog ∷ MonadIO m ⇒ LogT m a → m a
+noLog ∷ (MonadIO m, MonadMask m) ⇒ LogT m a → m a
 noLog = runLog defCfg []
 
 -- | Run @LogT@ monad with @Log@
@@ -46,10 +46,8 @@ withLog ∷ Log → LogT m a → m a
 withLog l act = runReaderT (runLogT act) l
 
 -- | Run @LogT@ monad with log config and handlers
-runLog ∷ MonadIO m ⇒ LogConfig → [LogHandler] → LogT m a → m a
-runLog cfg handlers act = do
-	l ← liftIO $ newLog cfg handlers
-	withLog l act
+runLog ∷ (MonadIO m, MonadMask m) ⇒ LogConfig → [LogHandler] → LogT m a → m a
+runLog cfg handlers = bracket (liftIO $ newLog cfg handlers) (liftIO ∘ stopLog) ∘ flip withLog
 
 -- | Ask log
 askLog ∷ MonadLog m ⇒ m Log
