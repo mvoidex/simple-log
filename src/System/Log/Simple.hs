@@ -3,7 +3,7 @@
 -- Create log config:
 --
 -- @
---myCfg = logCfg [("app", Trace), ("app.sub", Debug)]
+--myCfg = logCfg [(\"\", Info), (\"app\", Trace), (\"app.sub\", Debug)]
 -- @
 --
 -- Create log and run log monad
@@ -29,13 +29,23 @@
 --function2 ∷ MonadLog m ⇒ m ()
 --function2 = component \"app.sub\" $ scope \"foo\" $ do
 --	scope \"bar/baz\" $ do
---		sendLog Info "Component app.sub and scope foo/bar/baz"
---		sendLog Trace "Invisible: app.sub configured with debug level"
---	sendLog Info "Same component and scope foo"
---	component "module" $ sendLog Info "Component module and root scope"
+--		sendLog Info \"Component app.sub and scope foo/bar/baz\"
+--		sendLog Trace \"Invisible: app.sub configured with debug level\"
+--	sendLog Info \"Same component and scope foo\"
+--	component \"module\" $ sendLog Info \"Component module and root scope\"
 -- @
+--
+-- You can update config with @updateLogConfig@ function
+-- And change handlers with @updateLogHandlers@
 -- 
 -- There're also global logger @globalLog@, that can be used with @runGlobalLog@
+--
+-- @
+--test ∷ IO ()
+--test = do
+--	updateLogHandlers globalLog ([handler text (file \"test.log\")]:)
+--	runGlobalLog $ sendLog Info \"This will go to test.log too\"
+-- @
 --
 module System.Log.Simple (
 	module System.Log.Simple.Base,
