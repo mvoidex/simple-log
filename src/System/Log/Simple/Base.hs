@@ -8,12 +8,13 @@ module System.Log.Simple.Base (
 	LogHandler, handler,
 	LogConfig(..), defCfg, logCfg, componentCfg, componentLevel,
 	Log(..),
-	newLog, rootLog, getLog, subLog, updateLogConfig, updateLogHandlers, writeLog, stopLog,
+	newLog, rootLog, getLog, subLog, getLogConfig, updateLogConfig, updateLogHandlers, writeLog, stopLog,
 	) where
 
 import Prelude.Unicode
 
 import Control.Applicative
+import Control.Arrow
 import qualified Control.Exception as E
 import Control.Concurrent
 import qualified Control.Concurrent.Async as A
@@ -259,10 +260,10 @@ newLog cfg handlers = do
 		runHandlers ∷ FChan Message → [LogHandler] → ContT () IO ()
 		runHandlers inCh hs = do
 			hs' ← sequence $ map (fmap tryLog) hs
-			fix $ \loop → do
+			fix $ \loop' → do
 				msg ← liftIO $ readChan inCh
 				case msg of
-					Just msg' → liftIO (mapM_ ($ msg') hs') >> loop
+					Just msg' → liftIO (mapM_ ($ msg') hs') >> loop'
 					Nothing → return ()
 
 		-- | Start handlers thread
@@ -306,9 +307,13 @@ subLog comp scope l = l {
 	logComponent = logComponent l `mappend` comp,
 	logScope = logScope l `mappend` scope }
 
+-- | Read log config
+getLogConfig ∷ MonadIO m ⇒ Log → m LogConfig
+getLogConfig l = liftIO $ readMVar (logConfig l)
+
 -- | Modify log config
-updateLogConfig ∷ MonadIO m ⇒ Log → (LogConfig → LogConfig) → m ()
-updateLogConfig l update = liftIO $ modifyMVar_ (logConfig l) (return ∘ update)
+updateLogConfig ∷ MonadIO m ⇒ Log → (LogConfig → LogConfig) → m LogConfig
+updateLogConfig l update = liftIO $ modifyMVar (logConfig l) (return ∘ (update &&& id))
 
 -- | Update log handlers, this restarts handlers thread
 updateLogHandlers ∷ MonadIO m ⇒ Log → ([LogHandler] → [LogHandler]) → m ()

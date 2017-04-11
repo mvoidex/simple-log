@@ -72,7 +72,7 @@ import System.Log.Simple.Base (
 	LogConfig(..), defCfg, logCfg, componentCfg, Log(..),
 	newLog, rootLog, getLog, subLog,
 	updateLogConfig, updateLogHandlers, writeLog, stopLog)
-import System.Log.Simple.Monad (MonadLog, LogT(..), noLog, withLog, runLog, askLog, sendLog, component, scope_, scope, scopeM, scoper, scoperM, trace)
+import System.Log.Simple.Monad (MonadLog(..), LogT(..), noLog, withLog, runLog, sendLog, component, scope_, scope, scopeM, scoper, scoperM, trace)
 import System.Log.Simple.Text
 import System.Log.Simple.Stream
 import System.Log.Simple.File
