@@ -280,6 +280,9 @@ newLog cfg handlers = do
 			my ← myThreadId
 			writeFChan ch ((messageComponent msg, my), msg)
 
+		waitHandlers ∷ IO ()
+		waitHandlers = readMVar handlersThread >>= A.wait
+
 	p ← A.async $ void $ do
 		m ← foldM process M.empty cts
 		stopChildren m
@@ -288,7 +291,7 @@ newLog cfg handlers = do
 		logComponent = mempty,
 		logScope = mempty,
 		logPost = writeMessage,
-		logStop = stopFChan ch >> A.wait p,
+		logStop = stopFChan ch >> A.wait p >> waitHandlers,
 		logConfig = cfgVar,
 		logHandlers = handlersVar,
 		logRestartHandlers = restartHandlers }
