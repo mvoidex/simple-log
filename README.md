@@ -23,9 +23,7 @@ yourFunction = component "app" $ scope "your" $ do
   sendLog Trace "Hello from your function"
 </pre>
 
-Each component can have different level in config, subcomponents are specified with '.'
-Components have independent scopes
-Scopes can be nested and separated with '/':
+Each component can have different level in config, subcomponents are specified with '.'. Components have independent scopes, and scopes can be nested and separated with '/':
 <pre>
 function2 ∷ MonadLog m ⇒ m ()
 function2 = component "app.sub" $ scope "foo" $ do
@@ -36,8 +34,7 @@ function2 = component "app.sub" $ scope "foo" $ do
  component "module" $ sendLog Info "Component module and root scope"
 </pre>
 
-You can update config with `updateLogConfig` function
-And change handlers with `updateLogHandlers`
+You can update config with `updateLogConfig` function and change handlers with `updateLogHandlers`
 
 There're also global logger `globalLog`, that can be used with `runGlobalLog`
 <pre>
