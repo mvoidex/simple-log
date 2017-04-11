@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, FlexibleInstances, UndecidableInstances, MultiParamTypeClasses, GeneralizedNewtypeDeriving, ConstraintKinds, FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings, FlexibleInstances, UndecidableInstances, MultiParamTypeClasses, GeneralizedNewtypeDeriving, ConstraintKinds, FlexibleContexts, CPP, ImplicitParams #-}
 
 module System.Log.Simple.Monad (
 	-- | Monad log
@@ -18,7 +18,9 @@ module System.Log.Simple.Monad (
 import Prelude hiding (log)
 import Prelude.Unicode
 
+#if __GLASGOW_HASKELL__ >= 800
 import Control.Exception (SomeException)
+#endif
 import Control.Monad.IO.Class
 import Control.Monad.Morph
 import Control.Monad.Reader
@@ -85,6 +87,17 @@ component c = localLog (getLog (read ∘ T.unpack $ c) mempty)
 -- | Create local scope
 scope_ ∷ MonadLog m ⇒ Text → m a → m a
 scope_ s = localLog (subLog mempty (read ∘ T.unpack $ s))
+
+
+#if __GLASGOW_HASKELL__ < 800
+type HasCallStack = ?callStack ∷ CallStack
+
+callStack ∷ HasCallStack ⇒ CallStack
+callStack = ?callStack
+
+prettyCallStack ∷ CallStack → String
+prettyCallStack = showCallStack
+#endif
 
 -- | Scope with log all exceptions
 scope ∷ MonadLog m ⇒ Text → m a → m a
