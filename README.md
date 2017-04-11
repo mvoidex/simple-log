@@ -1,5 +1,6 @@
-simple-log
-=======
+# simple-log
+
+[![Hackage version](https://img.shields.io/hackage/v/simple-log.svg?style=flat)](http://hackage.haskell.org/package/simple-log) [![Build Status](https://travis-ci.org/mvoidex/simple-log.png)](https://travis-ci.org/mvoidex/simple-log)
 
 Fast start
 --------
