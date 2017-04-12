@@ -25,7 +25,7 @@ import Data.Default
 import Data.Function (fix)
 import Data.Map (Map)
 import qualified Data.Map as M
-import Data.Maybe (catMaybes, isJust, fromMaybe)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
@@ -187,9 +187,6 @@ data Log = Log {
 	logRestartHandlers ∷ IO () }
 
 type FChan a = Chan (Maybe a)
-type LogId = (Component, ThreadId)
-type LogJob = (A.Async (), FChan Message)
-type LogMap = Map LogId LogJob
 
 writeFChan ∷ FChan a → a → IO ()
 writeFChan ch = writeChan ch ∘ Just
@@ -197,51 +194,23 @@ writeFChan ch = writeChan ch ∘ Just
 stopFChan ∷ FChan a → IO ()
 stopFChan ch = writeChan ch Nothing
 
-getFChanContents ∷ FChan a → IO [a]
-getFChanContents = liftM (catMaybes ∘ takeWhile isJust) ∘ getChanContents
-
 -- | Create log, returns root logger for root component
 --
 -- Messages from distinct threads and components are splitted in several chans, where they are processed, and then messages combined back and sent to log-thread
 --
 newLog ∷ LogConfig → [LogHandler] → IO Log
 newLog cfg handlers = do
-	ch ← newChan ∷ IO (FChan (LogId, Message))
-	chOut ← newChan ∷ IO (FChan Message)
-	cts ← getFChanContents ch
+	ch ← newChan ∷ IO (FChan Message)
 	cfgVar ← newMVar cfg
 	handlersVar ← newMVar handlers
 	handlersThread ← newEmptyMVar
 
 	let
-		-- | Write commands from separate threads to separate channels
-		process ∷ LogMap → (LogId, Message) → IO LogMap
-		process m (logId, msg) = do
-			(thAsync, thChan) ← maybe newChild return $ M.lookup logId m
-			writeFChan thChan msg
-			return $ M.insert logId (thAsync, thChan) m
-
-		-- | Stop all spawned asyncs for threads
-		stopChildren ∷ LogMap → IO ()
-		stopChildren m = do
-			forM_ (M.elems m) $ \(thAsync, thChan) → do
-				stopFChan thChan
-				A.wait thAsync
-			stopFChan chOut
-
 		-- | Pass message firther if it passes config
 		passMessage ∷ (Message → IO ()) → Message → IO ()
 		passMessage fn msg = do
 			cfg' ← readMVar cfgVar
 			when (componentLevel cfg' (messageComponent msg) ≤ messageLevel msg) $ fn msg
-
-		-- | New chan for thread, accepts commands from thread, writes processed messages to log-thread
-		newChild ∷ IO (A.Async (), FChan Message)
-		newChild = do
-			thChan ← newChan
-			thCts ← getFChanContents thChan
-			thAsync ← A.async $ mapM_ (passMessage $ writeFChan chOut) thCts
-			return (thAsync, thChan)
 
 		fatalMsg ∷ String → IO Message
 		fatalMsg s = do
@@ -268,7 +237,7 @@ newLog cfg handlers = do
 
 		-- | Start handlers thread
 		startHandlers ∷ IO (A.Async ())
-		startHandlers = readMVar handlersVar >>= A.async ∘ flip runContT return ∘ runHandlers chOut
+		startHandlers = readMVar handlersVar >>= A.async ∘ flip runContT return ∘ runHandlers ch
 
 		-- | Restart handlers thread
 		restartHandlers ∷ IO ()
@@ -276,22 +245,17 @@ newLog cfg handlers = do
 
 		-- | Write message with myThreadId
 		writeMessage ∷ Message → IO ()
-		writeMessage msg = do
-			my ← myThreadId
-			writeFChan ch ((messageComponent msg, my), msg)
+		writeMessage = passMessage (writeFChan ch)
 
 		waitHandlers ∷ IO ()
 		waitHandlers = readMVar handlersThread >>= A.wait
 
-	p ← A.async $ void $ do
-		m ← foldM process M.empty cts
-		stopChildren m
 	startHandlers >>= putMVar handlersThread
 	return $ Log {
 		logComponent = mempty,
 		logScope = mempty,
 		logPost = writeMessage,
-		logStop = stopFChan ch >> A.wait p >> waitHandlers,
+		logStop = stopFChan ch >> waitHandlers,
 		logConfig = cfgVar,
 		logHandlers = handlersVar,
 		logRestartHandlers = restartHandlers }
