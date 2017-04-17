@@ -21,9 +21,9 @@
 --	sendLog Trace \"Hello from your function\"
 -- @
 --
--- Each component can have different level in config, subcomponents are specified with '.'
+-- Each component can have different level in config, subcomponents are specified with \'.\'
 -- Components have independent scopes
--- Scopes can be nested and separated with '/':
+-- Scopes can be nested and separated with \'/\':
 --
 -- @
 --function2 ∷ MonadLog m ⇒ m ()
@@ -35,8 +35,8 @@
 --	component \"module\" $ sendLog Info \"Component module and root scope\"
 -- @
 --
--- You can update config with @updateLogConfig@ function
--- And change handlers with @updateLogHandlers@
+-- You can update config with @updateLogConfig@ (or @modifyLogConfig@ within log monad) function
+-- And change handlers with @updateLogHandlers@ (@modifyLogHandlers@)
 -- 
 -- There're also global logger @globalLog@, that can be used with @runGlobalLog@
 --
