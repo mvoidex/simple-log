@@ -6,6 +6,7 @@ module Main (
 
 import Data.Text (Text)
 import Test.Hspec
+import Lens.Micro.Platform
 
 import System.Log.Simple
 
@@ -24,6 +25,8 @@ main = hspec $ do
 					sendLog Trace "But not traces"
 			sendLog Trace "Root doesn't log traces"
 			sendLog Info "Root logs infos"
+			_ ← modifyLogConfig (set (ix "") Trace)
+			sendLog Trace "But now root logs traces too"
 		msgs `shouldBe` validMsgs
 
 testCfg ∷ LogConfig
@@ -41,4 +44,5 @@ validMsgs = [
 	"TRACE app:foo> This is visible",
 	"DEBUG app:foo> And this is visible too",
 	"DEBUG app.sub:bar/baz/quux> Debugs here are visible",
-	"INFO :> Root logs infos"]
+	"INFO :> Root logs infos",
+	"TRACE :> But now root logs traces too"]

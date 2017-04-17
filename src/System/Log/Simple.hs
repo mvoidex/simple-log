@@ -45,6 +45,8 @@
 --test = do
 --	updateLogHandlers globalLog ([handler text (file \"test.log\")]:)
 --	runGlobalLog $ sendLog Info \"This will go to test.log too\"
+--	updateLogConfig globalLog (set (ix \"\") Debug)
+--	runGlobalLog $ sendLog Debug \"Now debug logs too\"
 -- @
 --
 module System.Log.Simple (
@@ -72,7 +74,10 @@ import System.Log.Simple.Base (
 	LogConfig(..), defCfg, logCfg, componentCfg, Log(..),
 	newLog, rootLog, getLog, subLog,
 	updateLogConfig, updateLogHandlers, writeLog, stopLog)
-import System.Log.Simple.Monad (MonadLog(..), LogT(..), noLog, withLog, runLog, sendLog, component, scope_, scope, scopeM, scoper, scoperM, trace)
+import System.Log.Simple.Monad (
+	MonadLog(..), LogT(..), noLog, withLog, runLog, sendLog,
+	component, scope_, scope, scopeM, scoper, scoperM, trace,
+	modifyLogConfig, modifyLogHandlers)
 import System.Log.Simple.Text
 import System.Log.Simple.Stream
 import System.Log.Simple.File

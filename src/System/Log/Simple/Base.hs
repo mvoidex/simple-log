@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell, RankNTypes #-}
+{-# LANGUAGE OverloadedStrings, TemplateHaskell, RankNTypes, TypeFamilies #-}
 
 module System.Log.Simple.Base (
 	Level(..), level, level_,
@@ -31,6 +31,7 @@ import qualified Data.Text as T
 import Data.Time
 import Data.String
 import Lens.Micro.Platform
+import Lens.Micro.Internal
 import Text.Format
 
 
@@ -145,11 +146,22 @@ handler conv = fmap (∘ conv)
 data LogConfig = LogConfig {
 	_logConfigMap ∷ Map Component Level }
 
+makeLenses ''LogConfig
+
 instance Default LogConfig where
 	def = LogConfig mempty
 
 instance Show LogConfig where
 	show (LogConfig cfg) = unlines [show comp ++ ":" ++ show lev | (comp, lev) ← M.toList cfg]
+
+type instance Index LogConfig = Component
+type instance IxValue LogConfig = Level
+
+instance Ixed LogConfig where
+	ix n = logConfigMap ∘ ix n
+
+instance At LogConfig where
+	at n = logConfigMap ∘ at n
 
 -- | Default log config — info level
 defCfg ∷ LogConfig
@@ -158,8 +170,6 @@ defCfg = def
 -- | Make log config by list of components and levels
 logCfg ∷ [(Component, Level)] → LogConfig
 logCfg = LogConfig ∘ M.fromList
-
-makeLenses ''LogConfig
 
 -- | Component config level lens
 componentCfg ∷ Component → Lens' LogConfig (Maybe Level)

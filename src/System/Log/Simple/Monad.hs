@@ -13,6 +13,7 @@ module System.Log.Simple.Monad (
 	component,
 	scope_, scope, scopeM, scoper, scoperM,
 	trace,
+	modifyLogConfig, modifyLogHandlers,
 	) where
 
 import Prelude hiding (log)
@@ -88,7 +89,6 @@ component c = localLog (getLog (read ∘ T.unpack $ c) mempty)
 scope_ ∷ MonadLog m ⇒ Text → m a → m a
 scope_ s = localLog (subLog mempty (read ∘ T.unpack $ s))
 
-
 #if __GLASGOW_HASKELL__ < 800
 type HasCallStack = ?callStack ∷ CallStack
 
@@ -138,3 +138,11 @@ trace name act = do
 	v ← act
 	log Trace $ T.concat [name, " = ", fromString . show $ v]
 	return v
+
+-- | Modify config, same as @updateLogConfig@, but within @MonadLog@
+modifyLogConfig ∷ MonadLog m ⇒ (LogConfig → LogConfig) → m LogConfig
+modifyLogConfig fn = askLog >>= flip updateLogConfig fn
+
+-- | Modify handlers, same as @updateLogHandlers@, but within @MonadLog@
+modifyLogHandlers ∷ MonadLog m ⇒ ([LogHandler] → [LogHandler]) → m ()
+modifyLogHandlers fn = askLog >>= flip updateLogHandlers fn

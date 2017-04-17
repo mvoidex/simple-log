@@ -1,5 +1,5 @@
 Name:                 simple-log
-Version:              0.8.3
+Version:              0.8.4
 Synopsis:             Simple log for Haskell
 Description:          Log library for Haskell
 License:              BSD3
@@ -29,6 +29,7 @@ library
     exceptions >= 0.8 && < 0.9,
     filepath >= 1.4 && < 1.5,
     hformat == 0.2.*,
+    microlens == 0.4.*,
     microlens-platform == 0.3.*,
     mmorph == 1.0.*,
     mtl >= 2.2 && < 2.3,
@@ -60,4 +61,5 @@ test-suite test
     base >= 4.0 && < 6,
     simple-log,
     hspec >= 2.3 && < 2.5,
+    microlens-platform == 0.3.*,
     text >= 0.11.0 && < 2.0.0
