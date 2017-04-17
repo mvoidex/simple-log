@@ -41,5 +41,8 @@ There're also global logger `globalLog`, that can be used with `runGlobalLog`
 test ∷ IO ()
 test = do
 	updateLogHandlers globalLog ([handler text (file "test.log")]:)
-	runGlobalLog $ sendLog Info "This will go to test.log too"
+	runGlobalLog $ do
+		sendLog Info "This will go to test.log too"
+		modifyLogConfig (set (ix "") Debug)
+		sendLog Debug "Now debug is logged too"
 </pre>

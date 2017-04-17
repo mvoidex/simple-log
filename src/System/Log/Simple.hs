@@ -44,9 +44,10 @@
 --test ∷ IO ()
 --test = do
 --	updateLogHandlers globalLog ([handler text (file \"test.log\")]:)
---	runGlobalLog $ sendLog Info \"This will go to test.log too\"
---	updateLogConfig globalLog (set (ix \"\") Debug)
---	runGlobalLog $ sendLog Debug \"Now debug logs too\"
+--	runGlobalLog $ do
+--		sendLog Info \"This will go to test.log too\"
+--		modifyLogConfig (set (ix \"\") Debug)
+--		sendLog Debug \"Now debug is logged too\"
 -- @
 --
 module System.Log.Simple (
