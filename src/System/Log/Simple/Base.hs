@@ -126,7 +126,6 @@ data Message = Message {
 instance NFData Message where
 	rnf (Message t l c s m) = t `seq` l  `seq` rnf c `seq` rnf s `seq` rnf m
 
--- | Converts message some representation
 type Converter a = Message → a
 
 -- | Returns function which accepts consumed value
@@ -139,7 +138,6 @@ consumer = ContT
 -- | Message handler
 type LogHandler = Consumer Message
 
--- | Convert consumer creater to logger creater
 handler ∷ Converter a → Consumer a → Consumer Message
 handler conv = fmap (∘ conv)
 
