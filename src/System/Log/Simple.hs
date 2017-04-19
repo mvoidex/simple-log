@@ -87,10 +87,10 @@ import System.Log.Simple.Chan
 globalLog ∷ Log
 globalLog = unsafePerformIO $ newLog defCfg [handler text console]
 
-runGlobalLog ∷ LogT IO a → IO a
+runGlobalLog ∷ (MonadIO m, MonadMask m) ⇒ LogT m a → m a
 runGlobalLog = withLog globalLog
 
-runConsoleLog ∷ LogConfig → LogT IO a → IO a
+runConsoleLog ∷ (MonadIO m, MonadMask m) ⇒ LogConfig → LogT m a → m a
 runConsoleLog cfg = runLog cfg [handler text console]
 
 runLogChan ∷ (MonadIO m, MonadMask m) ⇒ (Chan w → LogHandler) → LogConfig → LogT m a → m (a, [w])
