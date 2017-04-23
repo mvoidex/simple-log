@@ -22,7 +22,7 @@ console = stream stderr
 coloredStream ∷ Handle → Consumer Formatted
 coloredStream h = do
 	liftIO $ hSetEncoding h utf8
-	return $ \f → hColored h f >> hFlush h
+	return $ \f → hColoredLine h f >> hFlush h
 
 coloredConsole ∷ Consumer Formatted
 coloredConsole = coloredStream stderr
