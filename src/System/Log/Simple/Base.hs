@@ -50,12 +50,12 @@ instance Default Level where
 	def = Trace
 
 instance Formattable Level where
-	formattable Trace _ = "TRACE" `withFlags` ["white"]
+	formattable Trace _ = "TRACE" `withFlags` ["gray"]
 	formattable Debug _ = "DEBUG" `withFlags` ["yellow"]
 	formattable Info _ = "INFO" `withFlags` ["blue"]
-	formattable Warning _ = "WARN" `withFlags` ["yellow"]
+	formattable Warning _ = "WARN" `withFlags` ["darkyellow"]
 	formattable Error _ = "ERROR" `withFlags` ["red"]
-	formattable Fatal _ = "FATAL" `withFlags` ["bgred"]
+	formattable Fatal _ = "FATAL" `withFlags` ["bg=red"]
 
 -- | Component — each one have separate log scopes and can have different politics
 -- Child component's root politics inherits its parent root politics
