@@ -85,13 +85,13 @@ import System.Log.Simple.File
 import System.Log.Simple.Chan
 
 globalLog ∷ Log
-globalLog = unsafePerformIO $ newLog defCfg [handler text console]
+globalLog = unsafePerformIO $ newLog defCfg [handler text coloredConsole]
 
-runGlobalLog ∷ (MonadIO m, MonadMask m) ⇒ LogT m a → m a
+runGlobalLog ∷ LogT m a → m a
 runGlobalLog = withLog globalLog
 
 runConsoleLog ∷ (MonadIO m, MonadMask m) ⇒ LogConfig → LogT m a → m a
-runConsoleLog cfg = runLog cfg [handler text console]
+runConsoleLog cfg = runLog cfg [handler text coloredConsole]
 
 runLogChan ∷ (MonadIO m, MonadMask m) ⇒ (Chan w → LogHandler) → LogConfig → LogT m a → m (a, [w])
 runLogChan c cfg act = do

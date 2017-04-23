@@ -49,6 +49,14 @@ data Level = Trace | Debug | Info | Warning | Error | Fatal
 instance Default Level where
 	def = Trace
 
+instance Formattable Level where
+	formattable Trace _ = "TRACE" `withFlags` ["white"]
+	formattable Debug _ = "DEBUG" `withFlags` ["yellow"]
+	formattable Info _ = "INFO" `withFlags` ["blue"]
+	formattable Warning _ = "WARN" `withFlags` ["yellow"]
+	formattable Error _ = "ERROR" `withFlags` ["red"]
+	formattable Fatal _ = "FATAL" `withFlags` ["bgred"]
+
 -- | Component — each one have separate log scopes and can have different politics
 -- Child component's root politics inherits its parent root politics
 -- Component name parts stored in reverse order
@@ -57,7 +65,7 @@ newtype Component = Component { componentPath ∷ [Text] } deriving (Eq, Ord)
 instance Show Component where
 	show = T.unpack ∘ T.intercalate "." ∘ reverse ∘ componentPath
 
-instance FormatBuild Component
+instance Formattable Component
 
 instance Read Component where
 	readsPrec _ = return ∘ flip (,) "" ∘ Component ∘ reverse ∘ splitBy '.' ∘ T.pack
@@ -78,7 +86,7 @@ newtype Scope = Scope { scopePath ∷ [Text] } deriving (Eq, Ord)
 instance Show Scope where
 	show = T.unpack ∘ T.intercalate "/" ∘ reverse ∘ scopePath
 
-instance FormatBuild Scope
+instance Formattable Scope
 
 instance Read Scope where
 	readsPrec _ = return ∘ flip (,) "" ∘ Scope ∘ reverse ∘ splitBy '/' ∘ T.pack
