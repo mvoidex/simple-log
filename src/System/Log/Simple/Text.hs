@@ -10,7 +10,7 @@ import System.Log.Simple.Base
 
 -- | Default time format
 defaultTimeFormat ∷ String
-defaultTimeFormat = "%_Y-%m-%d %T %z"
+defaultTimeFormat = "%_Y-%m-%d %T.%3q %z"
 
 textFmt ∷ FormatResult r ⇒ String → String → Converter r
 textFmt tmFmt msgFmt (Message tm l comp scope msg) = format msgFmt ~~ args where
