@@ -26,6 +26,7 @@ import Data.Function (fix)
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
+import Data.Semigroup (Semigroup(..))
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
@@ -73,6 +74,9 @@ instance Read Component where
 instance IsString Component where
 	fromString = read
 
+instance Semigroup Component where
+	Component l <> Component r = Component $ r ++ l
+
 instance Monoid Component where
 	mempty = Component []
 	Component l `mappend` Component r = Component $ r ++ l
@@ -93,6 +97,9 @@ instance Read Scope where
 
 instance IsString Scope where
 	fromString = read
+
+instance Semigroup Scope where
+	Scope l <> Scope r = Scope $ r ++ l
 
 instance Monoid Scope where
 	mempty = Scope []

@@ -1,0 +1,5 @@
+resolver: nightly-2018-05-14
+extra-deps:
+- SafeSemaphore-0.10.1
+- exceptions-0.8.3
+- hformat-0.3.2.0
