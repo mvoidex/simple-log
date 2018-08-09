@@ -100,33 +100,33 @@ prettyCallStack = showCallStack
 #endif
 
 -- | Scope with log all exceptions
-scope ∷ MonadLog m ⇒ Text → m a → m a
-scope s act = scope_ s $ catch act onError where
-	onError ∷ (MonadLog m, HasCallStack) ⇒ SomeException → m a
-	onError e = do
+scope ∷ (MonadLog m, HasCallStack) ⇒ Text → m a → m a
+scope s act = scope_ s $ catch act onErr where
+	onErr ∷ MonadLog m ⇒ SomeException → m a
+	onErr e = do
 		log Error $ T.unlines [
 			T.concat ["Scope leaves with exception: ", fromString ∘ show $ e],
 			fromString $ prettyCallStack callStack]
 		throwM e
 
 -- | Scope with log exception from @MonadError@
-scopeM ∷ (MonadLog m, MonadError e m, Show e) ⇒ Text → m a → m a
-scopeM s act = scope_ s $ catchError act onError where
-	onError ∷ (MonadLog m, MonadError e m, Show e, HasCallStack) ⇒ e → m a
-	onError e = do
+scopeM ∷ (MonadLog m, MonadError e m, Show e, HasCallStack) ⇒ Text → m a → m a
+scopeM s act = scope_ s $ catchError act onErr where
+	onErr ∷ (MonadLog m, MonadError e m, Show e) ⇒ e → m a
+	onErr e = do
 		log Error $ T.unlines [
 			T.concat ["Scope leaves with exception: ", fromString ∘ show $ e],
 			fromString $ prettyCallStack callStack]
 		throwError e
 
 -- | Scope with tracing result
-scoper ∷ (MonadLog m, Show a) ⇒ Text → m a → m a
+scoper ∷ (MonadLog m, Show a, HasCallStack) ⇒ Text → m a → m a
 scoper s act = do
 	r ← scope s act
 	log Trace $ T.concat ["Scope ", s, " leaves with result: ", fromString . show $ r]
 	return r
 
-scoperM ∷ (MonadLog m, MonadError e m, Show e, Show a) ⇒ Text → m a → m a
+scoperM ∷ (MonadLog m, MonadError e m, Show e, Show a, HasCallStack) ⇒ Text → m a → m a
 scoperM s act = do
 	r ← scopeM s act
 	log Trace $ T.concat ["Scope", s, " leaves with result: ", fromString . show $ r]
