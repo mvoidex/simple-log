@@ -10,7 +10,6 @@ Maintainer:           voidex@live.com
 Category:             Logging
 Build-type:           Simple
 Cabal-version:        >= 1.10
-Tested-with:          GHC == 7.6.1
 
 source-repository head
   type: git
@@ -18,12 +17,15 @@ source-repository head
 
 library
   hs-source-dirs: src
+  if !impl(ghc >= 8.0)
+    build-depends:
+      semigroups >= 0.18.2 && < 0.19
   build-depends:
     base >= 4.0 && < 6,
     async >= 2.0 && < 3.0,
     base-unicode-symbols >= 0.2 && < 0.3,
     containers >= 0.5 && < 0.6,
-    data-default == 0.7.*,
+    data-default >= 0.5 && < 0.8,
     deepseq >= 1.4 && < 1.5,
     directory >= 1.2 && < 1.4,
     exceptions >= 0.8 && < 0.11,
