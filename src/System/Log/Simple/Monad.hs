@@ -22,11 +22,12 @@ import Prelude.Unicode
 #if __GLASGOW_HASKELL__ >= 800
 import Control.Exception (SomeException)
 #endif
+import Control.Monad.Catch
+import Control.Monad.Except
+import Control.Monad.Fail
 import Control.Monad.IO.Class
 import Control.Monad.Morph
 import Control.Monad.Reader
-import Control.Monad.Except
-import Control.Monad.Catch
 import Data.String
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -42,7 +43,7 @@ instance {-# OVERLAPPABLE #-} (MonadLog m, MonadTrans t, MFunctor t, MonadIO (t 
 	localLog fn = hoist (localLog fn)
 
 newtype LogT m a = LogT { runLogT ∷ ReaderT Log m a }
-	deriving (Functor, Applicative, Monad, MonadIO, MonadReader Log, MonadThrow, MonadCatch, MonadMask)
+	deriving (Functor, Applicative, Monad, MonadFail, MonadIO, MonadReader Log, MonadThrow, MonadCatch, MonadMask)
 
 instance MonadTrans LogT where
 	lift = LogT ∘ lift
