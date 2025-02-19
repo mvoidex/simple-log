@@ -1,8 +1,12 @@
+{-# LANGUAGE CPP #-}
 module System.Log.Simple.File (
 	file
 	) where
 
 import Control.Monad.Cont
+#if MIN_VERSION_mtl(2,3,0)
+import Control.Monad.IO.Class (liftIO)
+#endif
 import Data.Text (Text)
 import System.Log.Simple.Base
 import System.FilePath

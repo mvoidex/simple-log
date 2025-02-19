@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell, RankNTypes, TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings, TemplateHaskell, RankNTypes, TypeFamilies, CPP #-}
 
 module System.Log.Simple.Base (
 	Level(..), level, level_,
@@ -20,13 +20,15 @@ import Control.Concurrent
 import qualified Control.Concurrent.Async as A
 import Control.DeepSeq
 import Control.Monad
+#if MIN_VERSION_mtl(2,3,0)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+#endif
 import Control.Monad.Cont
 import Data.Default
 import Data.Function (fix)
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
-import Data.Semigroup (Semigroup(..))
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
